@@ -1,12 +1,15 @@
 import { execSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
 
+// The Pages config overrides this to rebuild its own output directory.
+const BUILD = process.env.E2E_BUILD_CMD ?? 'npx vite build'
+
 // Simulates shipping a new app version while the user has history and an
 // unfinished workout. Runs once (desktop project) because it rebuilds dist/.
 test('PWA update: new version is offered, applied, and all data survives', async ({ page }, info) => {
   test.skip(info.project.name !== 'w1440', 'rebuilds dist/ — run once')
   test.setTimeout(180_000)
-  execSync('npx vite build', { env: { ...process.env, SILK_BUILD_ID: 'e2e-v1' }, stdio: 'ignore' })
+  execSync(BUILD, { env: { ...process.env, SILK_BUILD_ID: 'e2e-v1' }, stdio: 'ignore' })
 
   await page.goto('./')
   await page.evaluate(async () => {
@@ -32,7 +35,7 @@ test('PWA update: new version is offered, applied, and all data survives', async
   await expect(page.getByTestId('set-row')).toHaveCount(1)
 
   // Ship v2.
-  execSync('npx vite build', { env: { ...process.env, SILK_BUILD_ID: 'e2e-v2' }, stdio: 'ignore' })
+  execSync(BUILD, { env: { ...process.env, SILK_BUILD_ID: 'e2e-v2' }, stdio: 'ignore' })
   await page.reload() // triggers the SW update check
   // The prompt must not interrupt the workout screen…
   await page.waitForTimeout(1500)

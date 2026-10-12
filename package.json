@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e",
-    "preview:lan": "SILK_HTTPS=1 vite preview --host 0.0.0.0 --port 4443 --strictPort"
+    "preview:lan": "SILK_HTTPS=1 vite preview --host 0.0.0.0 --port 4443 --strictPort",
+    "test:e2e:pages": "playwright test -c playwright.pages.config.ts"
   },
   "engines": {
     "node": ">=20"

@@ -15,8 +15,9 @@ const https =
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
 export default defineConfig({
-  // Relative base keeps the build portable (any static host / sub-path).
-  base: './',
+  // Relative base by default (dev, local preview, E2E). GitHub Pages builds set
+  // BASE_PATH=/Silkapp/ so every asset, the manifest and the SW scope live under it.
+  base: process.env.BASE_PATH ?? './',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(process.env.SILK_BUILD_ID ?? new Date().toISOString().slice(0, 16)),
