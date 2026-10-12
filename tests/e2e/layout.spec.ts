@@ -40,9 +40,13 @@ test('with history: screens, charts and active workout fit the viewport', async 
   await expect(page.getByTestId('input-weight')).not.toHaveValue('')
   for (let i = 0; i < 6; i++) {
     await page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) }).click()
+    await expect(page.getByText(`Ćwiczenie ${i + 1} z 6`)).toBeVisible()
+    // Wait until the exercise's form (and its save button) has mounted.
+    await expect(page.getByTestId('set-label')).toBeVisible()
     await expectNoHorizontalOverflow(page, `workout exercise ${i + 1}`)
   }
   // Primary action is within the viewport (thumb zone)
+  await expect(page.getByTestId('save-set')).toBeVisible()
   const box = await page.getByTestId('save-set').boundingBox()
   const vh = page.viewportSize()!.height
   expect(box!.y + box!.height).toBeLessThanOrEqual(vh)
