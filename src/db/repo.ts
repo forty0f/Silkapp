@@ -203,9 +203,9 @@ export async function setsForSession(sessionId: string): Promise<SetEntry[]> {
 }
 
 /** Last completed performance of an exercise, excluding a given session. */
-export async function lastPerformance(exerciseId: ExerciseId, excludeSessionId?: string): Promise<ExercisePerformance | null> {
+export async function lastPerformance(exerciseId: ExerciseId, excludeSessionId?: string, beforeIso?: string): Promise<ExercisePerformance | null> {
   const sessions = (await db.sessions.where('status').equals('completed').toArray())
-    .filter((s) => s.id !== excludeSessionId && s.exercises.some((e) => e.exerciseId === exerciseId))
+    .filter((s) => s.id !== excludeSessionId && (!beforeIso || s.startedAt < beforeIso) && s.exercises.some((e) => e.exerciseId === exerciseId))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   for (const s of sessions) {
     const sets = await db.sets.where('[sessionId+exerciseId]').equals([s.id, exerciseId]).toArray()
