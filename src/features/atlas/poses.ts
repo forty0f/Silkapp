@@ -34,7 +34,7 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   },
   'flat-db-press': {
     viewBox: '10 20 180 140',
-    start: { view: 'side', hip: [98, 104], torso: -90, ankle: [142, 147], knee: -1, hand: [57, 56], elbow: 1, hand2: [60, 57] },
+    start: { view: 'side', hip: [98, 104], torso: -90, ankle: [142, 147], knee: -1, hand: [56, 54.6], elbow: 1, hand2: [59, 55] },
     end: { view: 'side', hip: [98, 104], torso: -90, ankle: [142, 147], knee: -1, hand: [72, 97], elbow: 1, hand2: [75, 98] },
     props: [{ kind: 'flatBench', x1: 22, x2: 128, top: 113 }],
     dumbbell: 'endOn',
@@ -42,7 +42,7 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   },
   'one-arm-row': {
     viewBox: '10 20 180 140',
-    start: { view: 'side', hip: [80, 75], torso: 98, ankle: [76, 147], knee: 1, ankle2: [30, 107], knee2: -1, foot2: -90, hand: [125, 117], elbow: 1, hand2: [128, 107], elbow2: 1 },
+    start: { view: 'side', hip: [80, 75], torso: 98, ankle: [76, 147], knee: 1, ankle2: [30, 107], knee2: -1, foot2: -90, hand: [124.5, 118.4], elbow: 1, hand2: [128, 107], elbow2: 1 },
     end: { view: 'side', hip: [80, 75], torso: 98, ankle: [76, 147], knee: 1, ankle2: [30, 107], knee2: -1, foot2: -90, hand: [103, 80], elbow: 1, hand2: [128, 107], elbow2: 1 },
     props: [{ kind: 'flatBench', x1: 20, x2: 140, top: 113 }],
     dumbbell: 'endOn',
@@ -52,7 +52,7 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   'romanian-deadlift': {
     viewBox: '20 0 170 160',
     start: { view: 'side', ...STAND, hand: [102, 78.5], elbow: 1, hand2: [100, 78.5] },
-    end: { view: 'side', hip: [70, 82], torso: 110, ankle: [100, 147], ankle2: [95, 147], knee: -1, hand: [112, 114], elbow: 1, hand2: [110, 114] },
+    end: { view: 'side', hip: [70, 82], torso: 110, ankle: [100, 147], ankle2: [95, 147], knee: -1, hand: [111.5, 116.5], elbow: 1, hand2: [109.5, 116.5] },
     props: [],
     dumbbell: 'endOn',
     arrow: { track: 'hip', bend: -6, shift: [-6, -12] },
@@ -75,7 +75,7 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   },
   'incline-db-press': {
     viewBox: '0 -10 180 170',
-    start: { view: 'side', hip: [76, 106], torso: 235, headTilt: 20, ankle: [132, 147], knee: -1, hand: [44, 32], elbow: 1, hand2: [47, 33] },
+    start: { view: 'side', hip: [76, 106], torso: 235, headTilt: 20, ankle: [132, 147], knee: -1, hand: [43.5, 31.3], elbow: 1, hand2: [46, 31.5] },
     end: { view: 'side', hip: [76, 106], torso: 235, headTilt: 20, ankle: [132, 147], knee: -1, hand: [56, 78], elbow: 1, hand2: [59, 79] },
     props: [{ kind: 'inclineBench', seat: [60, 102], top: 114, back: { from: [70, 113], angle: 35, length: 72 } }],
     dumbbell: 'endOn',
@@ -91,8 +91,8 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   },
   'chest-supported-row': {
     viewBox: '10 20 180 140',
-    start: { view: 'side', hip: [72, 101.3], torso: 125, ankle: [17, 145], knee: -1, foot: 70, ankle2: [22, 146], knee2: -1, foot2: 60, hand: [110, 124], elbow: 1, hand2: [113, 124] },
-    end: { view: 'side', hip: [72, 101.3], torso: 125, ankle: [17, 145], knee: -1, foot: 70, ankle2: [22, 146], knee2: -1, foot2: 60, hand: [85, 92], elbow: 1, hand2: [88, 92] },
+    start: { view: 'side', hip: [72, 101.3], torso: 125, ankle: [17, 145], knee: -1, foot: 70, ankle2: [22, 146], knee2: -1, foot2: 70, hand: [109, 125.6], elbow: 1, hand2: [112, 125.4] },
+    end: { view: 'side', hip: [72, 101.3], torso: 125, ankle: [17, 145], knee: -1, foot: 70, ankle2: [22, 146], knee2: -1, foot2: 70, hand: [85, 92], elbow: 1, hand2: [88, 92] },
     props: [{ kind: 'proneIncline', from: [44, 128], to: [104, 86] }],
     dumbbell: 'endOn',
     arrow: { track: 'hand', bend: -10, shift: [22, 4] },
@@ -100,7 +100,7 @@ export const ART: Record<ExerciseId, ExerciseArt> = {
   'db-overhead-press': {
     viewBox: '20 -32 170 192',
     start: { view: 'side', ...STAND, hand: [109, 30], elbow: 1, hand2: [107, 31] },
-    end: { view: 'side', ...STAND, hand: [103, -18], elbow: 1, hand2: [101, -17] },
+    end: { view: 'side', ...STAND, hand: [101.5, -20.8], elbow: 1, hand2: [99.5, -20.6] },
     props: [],
     dumbbell: 'endOn',
     arrow: { track: 'hand', bend: 0, shift: [20, 0] },

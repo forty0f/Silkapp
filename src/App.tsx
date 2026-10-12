@@ -36,7 +36,12 @@ export function App() {
   useEffect(() => {
     ensureInitialized()
       .then(() => setState('ready'))
-      .catch((e: unknown) => setState({ error: e instanceof Error ? e.message : String(e) }))
+      .catch((e: unknown) => {
+        const err = e as { name?: string; message?: string }
+        if (err?.name === 'VersionError') {
+          setState({ error: 'Baza danych na tym urządzeniu pochodzi z nowszej wersji aplikacji. Zamknij aplikację całkowicie i uruchom ją ponownie, aby wczytać aktualną wersję. Dane nie zostały zmienione.' })
+        } else setState({ error: err?.message ?? String(e) })
+      })
   }, [])
 
   if (state === 'loading') return <div className="min-h-dvh bg-bg" aria-busy="true" />

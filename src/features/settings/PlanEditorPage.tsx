@@ -183,7 +183,7 @@ export function PlanEditorPage() {
         <RotateCcw size={16} /> Przywróć wartości domyślne
       </Button>
 
-      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-line/60 bg-bg/95 px-4 py-3 backdrop-blur-xl">
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-line/60 bg-bg/95 px-safe py-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-2xl gap-3">
           <Button className="flex-1" onClick={() => (dirty ? setDraft(structuredClone(current)) : navigate('/settings'))}>
             {dirty ? 'Odrzuć zmiany' : 'Wróć'}

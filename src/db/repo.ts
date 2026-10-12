@@ -13,7 +13,7 @@ import type {
   Suggestion,
   WorkoutType,
 } from '../domain/types'
-import { db, nowIso, uuid } from './db'
+import { db, nowIso, uuid, withDbRetry } from './db'
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'updatedAt'> = {
   id: 'settings',
@@ -64,8 +64,12 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Promise<void> {
-  const current = await getSettings()
-  await db.settings.put({ ...current, ...patch, id: 'settings', updatedAt: nowIso() })
+  await withDbRetry(async () => {
+    const current = await getSettings()
+    await db.settings.put({ ...current, ...patch, id: 'settings', updatedAt: nowIso() })
+  })
+  // Proposed loads depend on the step.
+  if (patch.weightStepKg !== undefined) await reconcileAll()
 }
 
 export async function completedSessions(programId: string): Promise<Session[]> {
@@ -106,7 +110,7 @@ export async function getNextSessionInfo(): Promise<NextSessionInfo | null> {
 
 /** Starts a session (or returns the unfinished one, never creating two). */
 export async function startSession(override?: WorkoutType): Promise<Session> {
-  return db.transaction('rw', db.sessions, db.programs, db.plans, async () => {
+  return withDbRetry(() => db.transaction('rw', db.sessions, db.programs, db.plans, async () => {
     const existing = await getInProgressSession()
     if (existing) return existing
     const info = await getNextSessionInfo()
@@ -137,11 +141,11 @@ export async function startSession(override?: WorkoutType): Promise<Session> {
     }
     await db.sessions.add(session)
     return session
-  })
+  }))
 }
 
 export async function updateSession(id: string, patch: Partial<Pick<Session, 'currentExerciseIndex' | 'restTimer' | 'note' | 'exercises'>>): Promise<void> {
-  const n = await db.sessions.update(id, { ...patch, updatedAt: nowIso() })
+  const n = await withDbRetry(() => db.sessions.update(id, { ...patch, updatedAt: nowIso() }))
   if (n === 0) throw new Error('Nie znaleziono sesji.')
 }
 
@@ -153,49 +157,65 @@ export type SetInput = Omit<SetEntry, 'id' | 'createdAt' | 'updatedAt' | 'delete
 /**
  * Persists a set (insert or update) and optionally starts the rest timer in
  * the same transaction, so a crash can never leave one without the other.
+ * The id is generated before the transaction, so a retried write after a
+ * lost IndexedDB connection updates the same record instead of duplicating it.
+ * Editing a completed session re-evaluates the dependent load suggestion.
  */
+export async function saveSetDetailed(input: SetInput, opts: { restTimer?: RestTimer | null } = {}): Promise<{ set: SetEntry; changes: SuggestionChange[] }> {
+  const id = input.id ?? uuid()
+  const isNew = !input.id
+  return withDbRetry(() =>
+    db.transaction('rw', [db.sets, db.sessions, db.suggestions, db.settings], async () => {
+      const session = await db.sessions.get(input.sessionId)
+      if (!session) throw new Error('Sesja nie istnieje.')
+      const now = nowIso()
+      const prev = await db.sets.get(id)
+      if (!isNew && !prev) throw new Error('Seria nie istnieje.')
+      let entry: SetEntry
+      if (prev) {
+        entry = { ...prev, ...input, id, setNumber: input.setNumber ?? prev.setNumber, createdAt: prev.createdAt, updatedAt: now }
+      } else {
+        const siblings = await db.sets
+          .where('[sessionId+exerciseId]')
+          .equals([input.sessionId, input.exerciseId])
+          .filter((s) => s.type === input.type)
+          .toArray()
+        const setNumber = input.setNumber ?? siblings.reduce((m, s) => Math.max(m, s.setNumber), 0) + 1
+        entry = { ...input, id, setNumber, createdAt: now, updatedAt: now, deletedAt: null }
+      }
+      await db.sets.put(entry)
+      const sessionPatch: Partial<Session> = { updatedAt: now }
+      if (opts.restTimer !== undefined) sessionPatch.restTimer = opts.restTimer
+      await db.sessions.update(session.id, sessionPatch)
+      const changes = session.status === 'completed' ? await reconcileExercise(entry.exerciseId) : []
+      return { set: entry, changes }
+    }),
+  )
+}
+
 export async function saveSet(input: SetInput, opts: { restTimer?: RestTimer | null } = {}): Promise<SetEntry> {
-  return db.transaction('rw', db.sets, db.sessions, async () => {
-    const session = await db.sessions.get(input.sessionId)
-    if (!session) throw new Error('Sesja nie istnieje.')
-    const now = nowIso()
-    let entry: SetEntry
-    if (input.id) {
-      const prev = await db.sets.get(input.id)
-      if (!prev) throw new Error('Seria nie istnieje.')
-      entry = { ...prev, ...input, id: prev.id, setNumber: input.setNumber ?? prev.setNumber, createdAt: prev.createdAt, updatedAt: now }
-    } else {
-      const siblings = await db.sets
-        .where('[sessionId+exerciseId]')
-        .equals([input.sessionId, input.exerciseId])
-        .filter((s) => s.type === input.type)
-        .toArray()
-      const setNumber = input.setNumber ?? siblings.reduce((m, s) => Math.max(m, s.setNumber), 0) + 1
-      entry = { ...input, id: uuid(), setNumber, createdAt: now, updatedAt: now, deletedAt: null }
-    }
-    await db.sets.put(entry)
-    const sessionPatch: Partial<Session> = { updatedAt: now }
-    if (opts.restTimer !== undefined) sessionPatch.restTimer = opts.restTimer
-    await db.sessions.update(session.id, sessionPatch)
-    return entry
-  })
+  return (await saveSetDetailed(input, opts)).set
 }
 
 /** Deletes a set and renumbers the remaining ones of the same exercise/type. */
-export async function deleteSet(id: string): Promise<void> {
-  await db.transaction('rw', db.sets, db.sessions, async () => {
-    const set = await db.sets.get(id)
-    if (!set) return
-    await db.sets.delete(id)
-    const rest = (await db.sets.where('[sessionId+exerciseId]').equals([set.sessionId, set.exerciseId]).toArray())
-      .filter((s) => s.type === set.type)
-      .sort((a, b) => a.setNumber - b.setNumber)
-    const now = nowIso()
-    for (let i = 0; i < rest.length; i++) {
-      if (rest[i].setNumber !== i + 1) await db.sets.update(rest[i].id, { setNumber: i + 1, updatedAt: now })
-    }
-    await db.sessions.update(set.sessionId, { updatedAt: now })
-  })
+export async function deleteSet(id: string): Promise<SuggestionChange[]> {
+  return withDbRetry(() =>
+    db.transaction('rw', [db.sets, db.sessions, db.suggestions, db.settings], async () => {
+      const set = await db.sets.get(id)
+      if (!set) return []
+      await db.sets.delete(id)
+      const rest = (await db.sets.where('[sessionId+exerciseId]').equals([set.sessionId, set.exerciseId]).toArray())
+        .filter((s) => s.type === set.type)
+        .sort((a, b) => a.setNumber - b.setNumber)
+      const now = nowIso()
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i].setNumber !== i + 1) await db.sets.update(rest[i].id, { setNumber: i + 1, updatedAt: now })
+      }
+      const session = await db.sessions.get(set.sessionId)
+      await db.sessions.update(set.sessionId, { updatedAt: now })
+      return session?.status === 'completed' ? reconcileExercise(set.exerciseId) : []
+    }),
+  )
 }
 
 export async function setsForSession(sessionId: string): Promise<SetEntry[]> {
@@ -230,43 +250,89 @@ export function performanceFor(session: Session, exerciseId: ExerciseId, sets: S
 }
 
 /**
- * Completes the session and records load suggestions. Suggestions are never
+ * Completes the session and reconciles load suggestions. Suggestions are never
  * applied automatically — the user accepts or rejects each one.
  */
 export async function finishSession(id: string): Promise<Suggestion[]> {
-  return db.transaction('rw', db.sessions, db.sets, db.suggestions, db.settings, async () => {
-    const session = await db.sessions.get(id)
-    if (!session) throw new Error('Sesja nie istnieje.')
-    const settings = await getSettings()
-    const sets = await setsForSession(id)
-    const now = nowIso()
-    const created: Suggestion[] = []
-    for (const ex of session.exercises) {
-      const perf = performanceFor(session, ex.exerciseId, sets)
-      if (!perf) continue
-      const ev = evaluatePerformance(perf, settings.weightStepKg)
-      if ((ev.status === 'increase' || ev.status === 'unify') && ev.workingWeightKg != null && ev.suggestedWeightKg != null) {
-        const stale = await db.suggestions.where('exerciseId').equals(ex.exerciseId).filter((s) => s.status === 'pending').toArray()
-        await db.suggestions.bulkDelete(stale.map((s) => s.id))
-        const sug: Suggestion = {
-          id: uuid(),
-          exerciseId: ex.exerciseId,
-          sourceSessionId: id,
-          fromWeightKg: ev.workingWeightKg,
-          toWeightKg: ev.suggestedWeightKg,
-          status: 'pending',
-          decidedAt: null,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-        }
-        await db.suggestions.add(sug)
-        created.push(sug)
-      }
+  return withDbRetry(() =>
+    db.transaction('rw', [db.sessions, db.sets, db.suggestions, db.settings], async () => {
+      const session = await db.sessions.get(id)
+      if (!session) throw new Error('Sesja nie istnieje.')
+      const now = nowIso()
+      await db.sessions.update(id, { status: 'completed', finishedAt: session.finishedAt ?? now, restTimer: null, updatedAt: now })
+      for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)
+      return db.suggestions.where('sourceSessionId').equals(id).filter((s) => s.status === 'pending').toArray()
+    }),
+  )
+}
+
+export type SuggestionChange = { exerciseId: ExerciseId; kind: 'created' | 'updated' | 'withdrawn'; suggestion: Suggestion }
+
+/**
+ * Brings the load suggestion of one exercise in line with its latest completed
+ * performance. Suggestions are derived data: whenever that performance (or the
+ * weight step) changes, the suggestion is created, updated or withdrawn.
+ * - Only the latest completed performance can carry a live suggestion; pending
+ *   suggestions from older sessions are removed.
+ * - If the values change, a previous decision no longer applies and the
+ *   suggestion returns to "pending".
+ * - Decided suggestions of older sessions stay as history.
+ * Must be called inside a transaction covering sessions, sets, suggestions, settings.
+ */
+export async function reconcileExercise(exerciseId: ExerciseId): Promise<SuggestionChange[]> {
+  const changes: SuggestionChange[] = []
+  const latest = await lastPerformance(exerciseId)
+  const all = await db.suggestions.where('exerciseId').equals(exerciseId).toArray()
+  for (const s of all) {
+    if (s.status === 'pending' && s.sourceSessionId !== latest?.sessionId) {
+      await db.suggestions.delete(s.id)
+      changes.push({ exerciseId, kind: 'withdrawn', suggestion: s })
     }
-    await db.sessions.update(id, { status: 'completed', finishedAt: now, restTimer: null, updatedAt: now })
-    return created
-  })
+  }
+  if (!latest) return changes
+  const settings = await getSettings()
+  const ev = evaluatePerformance(latest, settings.weightStepKg)
+  const existing = all.find((s) => s.sourceSessionId === latest.sessionId)
+  const qualifies = (ev.status === 'increase' || ev.status === 'unify') && ev.workingWeightKg != null && ev.suggestedWeightKg != null
+  const now = nowIso()
+  if (qualifies) {
+    if (!existing) {
+      const sug: Suggestion = {
+        id: uuid(),
+        exerciseId,
+        sourceSessionId: latest.sessionId,
+        fromWeightKg: ev.workingWeightKg!,
+        toWeightKg: ev.suggestedWeightKg!,
+        status: 'pending',
+        decidedAt: null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      }
+      await db.suggestions.add(sug)
+      changes.push({ exerciseId, kind: 'created', suggestion: sug })
+    } else if (existing.fromWeightKg !== ev.workingWeightKg || existing.toWeightKg !== ev.suggestedWeightKg) {
+      const updated: Suggestion = { ...existing, fromWeightKg: ev.workingWeightKg!, toWeightKg: ev.suggestedWeightKg!, status: 'pending', decidedAt: null, updatedAt: now }
+      await db.suggestions.put(updated)
+      changes.push({ exerciseId, kind: 'updated', suggestion: updated })
+    }
+  } else if (existing) {
+    await db.suggestions.delete(existing.id)
+    changes.push({ exerciseId, kind: 'withdrawn', suggestion: existing })
+  }
+  return changes
+}
+
+/** Re-evaluates suggestions of every exercise (e.g. after the weight step changes). */
+export async function reconcileAll(): Promise<SuggestionChange[]> {
+  return withDbRetry(() =>
+    db.transaction('rw', [db.sessions, db.sets, db.suggestions, db.settings], async () => {
+      const ids = new Set((await db.sessions.toArray()).flatMap((s) => s.exercises.map((e) => e.exerciseId)))
+      const out: SuggestionChange[] = []
+      for (const id of ids) out.push(...(await reconcileExercise(id)))
+      return out
+    }),
+  )
 }
 
 /** Reopens a completed session (e.g. finished by mistake). */
@@ -279,16 +345,21 @@ export async function reopenSession(id: string): Promise<void> {
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  await db.transaction('rw', db.sessions, db.sets, db.suggestions, async () => {
-    await db.sets.where('sessionId').equals(id).delete()
-    await db.suggestions.where('sourceSessionId').equals(id).delete()
-    await db.sessions.delete(id)
-  })
+  await withDbRetry(() =>
+    db.transaction('rw', [db.sessions, db.sets, db.suggestions, db.settings], async () => {
+      const session = await db.sessions.get(id)
+      await db.sets.where('sessionId').equals(id).delete()
+      await db.suggestions.where('sourceSessionId').equals(id).delete()
+      await db.sessions.delete(id)
+      // The previous performance may now be the latest one again.
+      if (session?.status === 'completed') for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)
+    }),
+  )
 }
 
 export async function decideSuggestion(id: string, accept: boolean): Promise<void> {
   const now = nowIso()
-  await db.suggestions.update(id, { status: accept ? 'accepted' : 'rejected', decidedAt: now, updatedAt: now })
+  await withDbRetry(() => db.suggestions.update(id, { status: accept ? 'accepted' : 'rejected', decidedAt: now, updatedAt: now }))
 }
 
 /**
@@ -346,11 +417,11 @@ export async function startNewProgram(name: string): Promise<void> {
 export async function saveBodyMetric(input: Omit<BodyMetric, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> & { id?: string }): Promise<void> {
   const now = nowIso()
   if (input.weightKg == null && input.waistCm == null) throw new Error('Podaj masę ciała lub obwód pasa.')
-  if (input.id) {
-    await db.bodyMetrics.update(input.id, { ...input, updatedAt: now })
-  } else {
-    await db.bodyMetrics.add({ ...input, id: uuid(), createdAt: now, updatedAt: now, deletedAt: null })
-  }
+  const id = input.id ?? uuid()
+  await withDbRetry(async () => {
+    const prev = await db.bodyMetrics.get(id)
+    await db.bodyMetrics.put({ ...input, id, createdAt: prev?.createdAt ?? now, updatedAt: now, deletedAt: null })
+  })
 }
 
 export async function deleteBodyMetric(id: string): Promise<void> {

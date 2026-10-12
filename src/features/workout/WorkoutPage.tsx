@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { BookOpen, Check, ChevronLeft, ChevronRight, Flag, History, LogOut, MoreHorizontal, StickyNote, Trash2, TrendingUp } from 'lucide-react'
@@ -7,11 +7,12 @@ import { decideSuggestion, deleteSession, finishSession, getSettings, lastPerfor
 import type { Session, SessionExercise, SetEntry, SetType } from '../../domain/types'
 import { formatRange, formatRest, formatRir } from '../../domain/plan'
 import { fmtKg } from '../../domain/progression'
-import { fmtClock, relativeDay } from '../../lib/format'
+import { fmtElapsed, relativeDay } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { unlockAudio } from '../../lib/feedback'
 import { useNow } from '../../lib/useNow'
 import { useWakeLock } from '../../lib/useWakeLock'
+import { clearDraft, loadDraft, storeDraft } from '../../lib/draftStore'
 import { Button, Card, Pill, Sheet, Toggle, WorkoutBadge, cx } from '../../components/ui'
 import { useFeedback } from '../../components/feedback'
 import { ExerciseFigure } from '../atlas/ExerciseFigure'
@@ -93,6 +94,7 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
     if (!ok) return
     try {
       await finishSession(session.id)
+      clearDraft()
       setMenuOpen(false)
     } catch (e) {
       toast(`Nie udało się zakończyć treningu: ${(e as Error).message}`, 'error')
@@ -109,6 +111,7 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
     if (!ok) return
     try {
       await deleteSession(session.id)
+      clearDraft()
       navigate('/', { replace: true })
     } catch (e) {
       toast(`Nie udało się usunąć: ${(e as Error).message}`, 'error')
@@ -134,7 +137,7 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
             </div>
           </div>
           <div className="tnum text-right text-sm text-muted" aria-label="Czas treningu">
-            {fmtClock((now - new Date(session.startedAt).getTime()) / 1000)}
+            {fmtElapsed((now - new Date(session.startedAt).getTime()) / 1000)}
           </div>
           <button type="button" aria-label="Menu treningu" onClick={() => setMenuOpen(true)} className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-muted active:bg-surface-2" data-testid="workout-menu">
             <MoreHorizontal size={24} />
@@ -288,30 +291,30 @@ function ExercisePanel({
   return (
     <div className="mt-3 space-y-3">
       <Card className="p-3">
-        <div className="flex gap-3">
-          <button type="button" onClick={onOpenAtlas} className="relative h-20 w-24 shrink-0 overflow-hidden min-[375px]:h-24 min-[375px]:w-28 rounded-xl border border-line/60 bg-[#0d1628]" aria-label={`Technika: ${ex.name}`}>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onOpenAtlas} className="relative h-16 w-20 shrink-0 overflow-hidden rounded-xl border border-line/60 bg-[#0d1628] min-[375px]:h-20 min-[375px]:w-24" aria-label={`Technika: ${ex.name}`}>
             <ExerciseFigure exerciseId={ex.exerciseId} phase="end" className="h-full w-full" />
-            <span className="absolute bottom-1 right-1 rounded-md bg-bg/80 p-1 text-accent">
-              <BookOpen size={14} />
+            <span className="absolute bottom-1 right-1 rounded-md bg-bg/80 p-0.5 text-accent">
+              <BookOpen size={13} />
             </span>
           </button>
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium text-faint">
               Ćwiczenie {index + 1} z {session.exercises.length}
             </div>
-            <h1 className="text-xl font-bold leading-tight tracking-tight" data-testid="exercise-name">
+            <h1 className="text-lg font-bold leading-tight tracking-tight min-[375px]:text-xl" data-testid="exercise-name">
               {ex.name}
             </h1>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Pill tone="blue">{formatRange(ex)}</Pill>
-              <Pill>
-                {ex.plannedSets} {ex.plannedSets === 1 ? 'seria' : ex.plannedSets < 5 ? 'serie' : 'serii'}
-              </Pill>
-              <Pill>przerwa {formatRest(ex.restSec)}</Pill>
-            </div>
           </div>
         </div>
-        <div className="mt-3 flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm" data-testid="last-performance">
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Pill tone="blue">{formatRange(ex)}</Pill>
+          <Pill>
+            {ex.plannedSets} {ex.plannedSets === 1 ? 'seria' : ex.plannedSets < 5 ? 'serie' : 'serii'}
+          </Pill>
+          <Pill>przerwa {formatRest(ex.restSec)}</Pill>
+        </div>
+        <div className="mt-2 flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm" data-testid="last-performance">
           <History size={16} className="mt-0.5 shrink-0 text-faint" />
           {ctx === undefined ? (
             <span className="text-faint">Wczytywanie…</span>
@@ -349,22 +352,19 @@ function ExercisePanel({
           {working.map((s) => (
             <SetRow key={s.id} label={s.isExtra ? `+${s.setNumber}` : String(s.setNumber)} s={s} ex={ex} onClick={() => setEditing(s)} />
           ))}
-          {Array.from({ length: Math.max(0, ex.plannedSets - working.length) }, (_, k) => {
-            const n = working.length + k + 1
-            const current = k === 0 && type === 'working'
-            return (
-              <li key={`p${n}`} className={cx('flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm', current ? 'border border-dashed border-accent/50 text-accent' : 'text-faint')}>
-                <span className="tnum w-7 font-semibold">{n}</span>
-                <span>{current ? 'Teraz' : 'Zaplanowana'}</span>
-              </li>
-            )
-          })}
+          {working.length < ex.plannedSets && (
+            <li className={cx('flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm', type === 'working' ? 'border border-dashed border-accent/50 text-accent' : 'text-faint')}>
+              <span className="tnum w-7 font-semibold">{working.length + 1}</span>
+              <span className="flex-1">{type === 'working' ? 'Teraz' : 'Następna robocza'}</span>
+              {ex.plannedSets - working.length > 1 && <span className="text-xs text-faint">+{ex.plannedSets - working.length - 1} zaplanowane</span>}
+            </li>
+          )}
         </ul>
       </Card>
 
-      <Card>
+      <Card className="px-3">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="grid grid-cols-2 rounded-xl bg-surface-2 p-1 text-sm" role="tablist">
+          <div className="grid shrink-0 grid-cols-2 rounded-xl bg-surface-2 p-1 text-sm" role="tablist">
             {(['working', 'warmup'] as const).map((t) => (
               <button
                 key={t}
@@ -373,7 +373,7 @@ function ExercisePanel({
                 aria-selected={type === t}
                 onClick={() => setType(t)}
                 data-testid={`type-${t}`}
-                className={cx('min-h-9 rounded-lg px-3 font-medium', type === t ? 'bg-surface-3 text-ink' : 'text-muted')}
+                className={cx('min-h-11 rounded-lg px-3 font-medium', type === t ? 'bg-surface-3 text-ink' : 'text-muted')}
               >
                 {t === 'working' ? 'Robocza' : 'Rozgrzewka'}
               </button>
@@ -401,6 +401,7 @@ function ExercisePanel({
               if (completedExercise) onAdvance()
             }}
             workingCount={working.length}
+            draftKey={`${session.id}|${ex.exerciseId}|${type}|${nextNumber}`}
           />
         )}
       </Card>
@@ -447,7 +448,9 @@ function SetForm({
   weightStep,
   workingCount,
   onSaved,
+  draftKey,
 }: {
+  draftKey: string
   session: Session
   ex: SessionExercise
   type: SetType
@@ -457,15 +460,22 @@ function SetForm({
   workingCount: number
   onSaved: (completedExercise: boolean, used: SetDraft) => void
 }) {
-  const [draft, setDraft] = useState<SetDraft>(initial)
+  const [draft, setDraftState] = useState<SetDraft>(() => loadDraft<SetDraft>(draftKey) ?? initial)
   const [busy, setBusy] = useState(false)
+  const inFlight = useRef(false)
   const { toast } = useFeedback()
+  const setDraft = (d: SetDraft) => {
+    setDraftState(d)
+    storeDraft(draftKey, d)
+  }
 
   const persist = async (status: 'done' | 'skipped') => {
+    if (inFlight.current) return
     const d = { ...draft, status, type }
     const err = validateDraft(ex, d)
     if (err) return toast(err, 'error')
     unlockAudio()
+    inFlight.current = true
     setBusy(true)
     try {
       const rest = type === 'working' ? ex.restSec : 60
@@ -473,6 +483,7 @@ function SetForm({
         { ...normalizeDraft(ex, d), sessionId: session.id, exerciseId: ex.exerciseId, isExtra: type === 'working' && isExtra },
         { restTimer: status === 'done' ? { exerciseId: ex.exerciseId, startedAt: Date.now(), durationSec: rest } : undefined },
       )
+      clearDraft(draftKey)
       requestPersistence()
       const completed = type === 'working' && !isExtra && workingCount + 1 >= ex.plannedSets
       onSaved(completed, d)
@@ -480,6 +491,7 @@ function SetForm({
     } catch (e) {
       toast(`Nie udało się zapisać serii: ${(e as Error).message}. Dane w formularzu zostały zachowane — spróbuj ponownie.`, 'error')
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }

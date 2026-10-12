@@ -70,10 +70,10 @@ export function RestTimerBar({
         </div>
         {!done && (
           <>
-            <button type="button" onClick={() => onAdjust(-15)} className="tnum min-h-11 rounded-xl bg-surface-3 px-2.5 text-sm font-medium active:bg-line" aria-label="Skróć przerwę o 15 sekund">
+            <button type="button" onClick={() => onAdjust(-15)} className="tnum min-h-11 min-w-11 rounded-xl bg-surface-3 px-2 text-sm font-medium active:bg-line" aria-label="Skróć przerwę o 15 sekund">
               −15
             </button>
-            <button type="button" onClick={() => onAdjust(15)} className="tnum min-h-11 rounded-xl bg-surface-3 px-2.5 text-sm font-medium active:bg-line" aria-label="Wydłuż przerwę o 15 sekund">
+            <button type="button" onClick={() => onAdjust(15)} className="tnum min-h-11 min-w-11 rounded-xl bg-surface-3 px-2 text-sm font-medium active:bg-line" aria-label="Wydłuż przerwę o 15 sekund">
               +15
             </button>
           </>

@@ -3,14 +3,24 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+
+// Optional local HTTPS for testing on an iPhone (see docs/IPHONE_HTTPS_TEST.md).
+const certDir = process.env.SILK_CERT_DIR ?? 'certs'
+const https =
+  process.env.SILK_HTTPS === '1' && existsSync(`${certDir}/cert.pem`) && existsSync(`${certDir}/key.pem`)
+    ? { cert: readFileSync(`${certDir}/cert.pem`), key: readFileSync(`${certDir}/key.pem`) }
+    : undefined
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
 export default defineConfig({
   // Relative base keeps the build portable (any static host / sub-path).
   base: './',
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_ID__: JSON.stringify(process.env.SILK_BUILD_ID ?? new Date().toISOString().slice(0, 16)),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -44,6 +54,7 @@ export default defineConfig({
     }),
   ],
   build: { chunkSizeWarningLimit: 800 },
+  preview: { https },
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],

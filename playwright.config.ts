@@ -23,9 +23,12 @@ export default defineConfig({
     timeout: 60_000,
   },
   projects: [
-    { name: 'iphone-se-320', use: { ...devices['iPhone SE'], viewport: { width: 320, height: 640 }, browserName: 'chromium' } },
-    { name: 'iphone-15-393', use: { ...devices['iPhone 15'], browserName: 'chromium' } },
-    { name: 'iphone-pro-max-430', use: { ...devices['iPhone 15 Pro Max'], viewport: { width: 430, height: 932 }, browserName: 'chromium' } },
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
+    // Chromium with iPhone-like viewports/touch. This is NOT Safari/WebKit — see AUDIT.md.
+    { name: 'w320', use: { ...devices['iPhone SE'], viewport: { width: 320, height: 568 }, browserName: 'chromium' } },
+    { name: 'w375', use: { ...devices['iPhone SE'], viewport: { width: 375, height: 667 }, browserName: 'chromium' } },
+    { name: 'w390', use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, browserName: 'chromium' } },
+    { name: 'w430', use: { ...devices['iPhone 15 Pro Max'], viewport: { width: 430, height: 932 }, browserName: 'chromium' } },
+    { name: 'w768', use: { ...devices['iPad Mini'], viewport: { width: 768, height: 1024 }, browserName: 'chromium' } },
+    { name: 'w1440', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
   ],
 })

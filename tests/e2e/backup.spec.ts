@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { importSeed } from './helpers'
+import { exportViaUi, importSeed } from './helpers'
 
 test('import seed → history, progression suggestion prefill, export round-trip, undo import', async ({ page }) => {
   await importSeed(page)
@@ -14,12 +13,7 @@ test('import seed → history, progression suggestion prefill, export round-trip
   await expect(page.getByTestId('session-list').locator('li')).toHaveCount(11)
 
   // Export: file must be valid and contain the same history
-  await page.goto('./#/settings')
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByTestId('export').click()
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toMatch(/^silkapp-kopia-\d{4}-\d{2}-\d{2}-\d{4}\.json$/)
-  const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'))
+  const { json: exported } = await exportViaUi(page)
   expect(exported.app).toBe('silkapp')
   expect(exported.data.sessions).toHaveLength(11)
   await expect(page.getByTestId('last-export')).not.toHaveText('nigdy')

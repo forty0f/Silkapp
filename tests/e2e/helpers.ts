@@ -21,3 +21,16 @@ export async function importSeed(page: Page) {
   await page.getByTestId('confirm-import').click()
   await expect(page.getByText('Dane przywrócone z kopii')).toBeVisible()
 }
+
+/** Two-step export (prepare → save) as on iOS; returns the parsed file and its path. */
+export async function exportViaUi(page: Page): Promise<{ path: string; json: { app: string; data: Record<string, unknown[]> } }> {
+  await page.goto('./#/settings')
+  await page.getByTestId('export').click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('deliver-export').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^silkapp-kopia-\d{4}-\d{2}-\d{2}-\d{4}\.json$/)
+  const path = (await download.path())!
+  const { readFileSync } = await import('node:fs')
+  return { path, json: JSON.parse(readFileSync(path, 'utf8')) }
+}

@@ -37,22 +37,35 @@ export function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<{ payload: ExportPayload; summary: ImportSummary; fileName: string } | null>(null)
   const [importErrors, setImportErrors] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [prepared, setPrepared] = useState<{ json: string; name: string; sessions: number; sets: number } | null>(null)
 
   if (!settings) return null
 
-  const doExport = async () => {
+  // Step 1 builds the file; step 2 hands it over from a direct tap, which iOS
+  // requires for the share sheet (navigator.share needs a fresh user gesture).
+  const prepareExport = async () => {
     setBusy(true)
     try {
       const payload = await buildExport()
-      const result = await deliverExportFile(JSON.stringify(payload, null, 1), exportFileName())
-      if (result !== 'cancelled') {
-        await updateSettings({ lastExportAt: new Date().toISOString() })
-        toast(result === 'shared' ? 'Kopia przekazana — wybierz „Zapisz w Plikach”, aby ją zachować.' : 'Plik kopii zapasowej pobrany.', 'success')
-      }
+      const json = JSON.stringify(payload, null, 1)
+      setPrepared({ json, name: exportFileName(), sessions: payload.data.sessions.length, sets: payload.data.sets.length })
     } catch (e) {
-      toast(`Eksport nie powiódł się: ${(e as Error).message}`, 'error')
+      toast(`Nie udało się przygotować kopii: ${(e as Error).message}`, 'error')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const deliver = async () => {
+    if (!prepared) return
+    try {
+      const result = await deliverExportFile(prepared.json, prepared.name)
+      if (result === 'cancelled') return
+      await updateSettings({ lastExportAt: new Date().toISOString() })
+      setPrepared(null)
+      toast(result === 'shared' ? 'Kopia przekazana. Upewnij się, że wybrałeś „Zapisz w Plikach”.' : 'Plik kopii zapasowej pobrany.', 'success')
+    } catch (e) {
+      toast(`Eksport nie powiódł się: ${(e as Error).message}`, 'error')
     }
   }
 
@@ -183,7 +196,7 @@ export function SettingsPage() {
           Ostatni eksport: <span className="text-ink" data-testid="last-export">{settings.lastExportAt ? `${fmtDate(settings.lastExportAt)} (${relativeDay(settings.lastExportAt)})` : 'nigdy'}</span>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button variant="primary" onClick={doExport} disabled={busy} data-testid="export">
+          <Button variant="primary" onClick={prepareExport} disabled={busy} data-testid="export">
             <Download size={18} /> Eksportuj dane (JSON)
           </Button>
           <Button onClick={() => fileRef.current?.click()} disabled={busy} data-testid="import">
@@ -261,8 +274,30 @@ export function SettingsPage() {
       </Card>
 
       <p className="mt-6 text-center text-xs text-faint">
-        Silk FBW {__APP_VERSION__} · schemat danych v{SCHEMA_VERSION} · działa offline, bez konta i bez wysyłania danych.
+        Silk FBW {__APP_VERSION__} (<span data-testid="build-id">{__BUILD_ID__}</span>) · schemat danych v{SCHEMA_VERSION} · działa offline, bez konta i bez wysyłania danych.
       </p>
+
+      <Sheet
+        open={!!prepared}
+        onClose={() => setPrepared(null)}
+        title="Kopia gotowa"
+        footer={
+          <Button variant="primary" size="lg" className="w-full" onClick={deliver} data-testid="deliver-export">
+            <Download size={18} /> Zapisz plik
+          </Button>
+        }
+      >
+        {prepared && (
+          <div className="space-y-2 text-sm text-muted">
+            <p>
+              <span className="break-all text-ink">{prepared.name}</span> · {(prepared.json.length / 1024).toLocaleString('pl-PL', { maximumFractionDigits: 0 })} KB
+            </p>
+            <p>
+              Zawiera {prepared.sessions} treningów i {prepared.sets} serii. Na iPhonie w arkuszu udostępniania wybierz <span className="text-ink">„Zapisz w Plikach”</span> (np. iCloud Drive), a nie tylko podgląd.
+            </p>
+          </div>
+        )}
+      </Sheet>
 
       <Sheet
         open={!!pendingImport}

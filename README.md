@@ -54,7 +54,9 @@ tests/e2e/    testy Playwright; tests/fixtures/seed.json — realistyczne dane t
 
 **Przygotowanie pod synchronizację (niezaimplementowana).** Wszystkie rekordy mają identyfikatory UUID, `createdAt`/`updatedAt` i pole `deletedAt`; sesje przechowują zamrożoną kopię planu. Dodanie synchronizacji wymaga backendu i zastąpienia twardych usunięć znacznikami `deletedAt` — bez zmiany modelu domenowego.
 
-**Ilustracje techniki.** W projekcie nie było dostarczonych grafik instruktażowych, a zdjęć z internetu nie użyto (prawa autorskie). Ilustracje są rysowane w SVG przez parametryczną sylwetkę o stałych proporcjach segmentów; kolana i łokcie wyznacza kinematyka odwrotna, więc pozycje są geometrycznie spójne. Każdą pozę zweryfikowano wizualnie (m.in. kolana nad palcami w przysiadzie, neutralne plecy i biodra cofnięte w RDL, pionowa goleń na górze hip thrustu, łokieć nad linią pleców w wiosłowaniu, przedramiona pionowo w wyciskaniach, kąt ławki ok. 30–35°). To schematy przypominające ustawienie, nie zastępują nauki techniki z trenerem. Dostarczone później grafiki można dodać do `public/` i podpiąć w `features/atlas`.
+**Ilustracje techniki.** W projekcie nie było dostarczonych grafik instruktażowych, a zdjęć z internetu nie użyto (prawa autorskie). Ilustracje to schematy SVG rysowane przez parametryczną sylwetkę o stałych proporcjach segmentów; kolana i łokcie wyznacza kinematyka odwrotna. Każda z 24 póz jest sprawdzana automatycznie testem geometrycznym (`src/features/atlas/poses.test.ts`) wobec kryteriów zapisanych na kartach atlasu (kąty stawów, ustawienie segmentów, punkty podparcia). Szczegóły i ograniczenia: [`AUDIT.md`](AUDIT.md#weryfikacja-ilustracji-punkt-5). Pozy nie zostały ocenione przez trenera; nie zastępują nauki techniki. Dostarczone później grafiki można dodać do `public/` i podpiąć w `features/atlas`.
+
+**Odporność danych.** Zapisy idą w transakcjach IndexedDB. Po utracie połączenia z bazą (znany problem iOS po powrocie z tła) transakcja jest jednorazowo ponawiana z tym samym id, więc nie powstają duplikaty. Niezapisany formularz serii jest przechowywany jako szkic. Propozycje progresji są danymi pochodnymi, przeliczanymi po każdej edycji historii.
 
 ## Uruchomienie
 
@@ -73,23 +75,20 @@ Kontrola jakości:
 npm run lint         # ESLint
 npm run typecheck    # TypeScript
 npm test             # testy jednostkowe (Vitest)
-npm run test:e2e     # testy E2E (Playwright; wymaga wcześniejszego npm run build)
+npm run test:e2e     # testy E2E w Chromium, 6 szerokości ekranu (wymaga wcześniejszego npm run build)
 npm run check        # wszystko powyżej po kolei
+npm run preview:lan  # podgląd HTTPS w sieci lokalnej dla iPhone'a (certyfikat w certs/, zob. docs/)
 ```
+
+Raport audytu i wyniki testów: [`AUDIT.md`](AUDIT.md). Testy E2E działają w Chromium, nie w Safari — testy na iPhonie: [`docs/IOS_MANUAL_CHECKLIST.md`](docs/IOS_MANUAL_CHECKLIST.md).
 
 Pierwsze uruchomienie Playwright lokalnie: `npx playwright install chromium`.
 
 ## Instalacja na iPhonie
 
-Service worker (praca offline) i instalacja działają tylko przez **HTTPS** (lub `localhost`). Adres w sieci lokalnej typu `http://192.168.x.x:4173` otworzy aplikację, ale bez trybu offline — nie używaj go na co dzień.
+Service worker (praca offline) i instalacja działają tylko przez **zaufane HTTPS**. Wersję testową bez publikowania uruchomisz według [`docs/IPHONE_HTTPS_TEST.md`](docs/IPHONE_HTTPS_TEST.md): lokalny serwer z certyfikatem mkcert albo Tailscale Serve. Na docelowy prywatny hosting z HTTPS wgrywa się zawartość `dist/` (ścieżki są względne). *Aplikacja nie została nigdzie opublikowana.*
 
-1. Opublikuj zawartość `dist/` na prywatnym hostingu z HTTPS (np. Cloudflare Pages, Netlify, własny serwer). Build używa ścieżek względnych, więc działa też w podkatalogu. *Aplikacja nie została nigdzie opublikowana — wybór miejsca należy do Ciebie.*
-2. Otwórz adres w **Safari** na iPhonie (inne przeglądarki na iOS mogą nie oferować instalacji).
-3. Stuknij **Udostępnij** → **Do ekranu początkowego** → **Dodaj**.
-4. Uruchom aplikację z ikony „Silk FBW” i otwórz każdą zakładkę raz przy połączeniu z internetem. Od tej chwili działa offline.
-5. Pierwszy eksport: **Ustawienia → Eksportuj dane (JSON)** → **Zapisz w Plikach** (np. iCloud Drive).
-
-Ważne: dane aplikacji zainstalowanej na ekranie początkowym są oddzielne od danych tej samej strony otwartej w Safari. Używaj zawsze ikony.
+W skrócie: Safari → adres → **Udostępnij → Do ekranu początkowego** → uruchom z ikony, przejdź raz przez wszystkie zakładki online, potem zrób pierwszy eksport (**Ustawienia → Eksportuj dane → Zapisz plik → Zapisz w Plikach**). Dane aplikacji zainstalowanej z ikony są oddzielne od danych strony otwartej w Safari, a każdy adres (origin) ma własną bazę.
 
 ## Znane ograniczenia
 
@@ -97,6 +96,6 @@ Ważne: dane aplikacji zainstalowanej na ekranie początkowym są oddzielne od d
 - Lokalny zapis nie jest kopią zapasową: usunięcie aplikacji, danych witryny lub reset telefonu kasuje historię. iOS może też czyścić dane witryn niezainstalowanych po ok. 7 dniach nieużywania. Regularnie eksportuj JSON.
 - Sygnał końca przerwy działa, gdy aplikacja jest na ekranie; iOS nie pozwala PWA grać dźwięku ani wibrować w tle (wibracje nie są obsługiwane w Safari). Po powrocie do aplikacji timer pokazuje poprawny czas.
 - Blokada wygaszania ekranu zależy od wsparcia Wake Lock API (iOS 16.4+, w trybie zainstalowanym od iOS 18.4).
-- Propozycje progresji liczone są w chwili zakończenia treningu; późniejsza edycja serii nie przelicza ich automatycznie (można wznowić i ponownie zakończyć trening).
-- Testy E2E uruchamiane są w Chromium z emulacją ekranów iPhone'a (320, 393, 430 px) i desktopu; prawdziwy silnik WebKit/Safari nie był dostępny w środowisku testowym — przed codziennym użyciem warto przejść jeden trening na iPhonie.
+- Testy E2E uruchamiane są w Chromium z emulacją ekranów 320–1440 px; silnik WebKit/Safari nie był dostępny. Przed codziennym użyciem przejdź listę `docs/IOS_MANUAL_CHECKLIST.md` na iPhonie.
+- Na 320×568 px formularz serii jest poniżej pierwszego ekranu; na 375×667 px wiersz RIR wymaga krótkiego przewinięcia.
 - Tydzień programu to 3 wykonane sesje, nie tydzień kalendarzowy; podsumowania tygodniowe w zakładce Progres są kalendarzowe.

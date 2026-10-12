@@ -205,7 +205,7 @@ export function HomePage() {
         </Card>
       </div>
 
-      <SectionTitle action={<button type="button" className="flex min-h-9 items-center text-sm text-accent" onClick={() => navigate('/progress')}>Szczegóły <ChevronRight size={16} /></button>}>
+      <SectionTitle action={<button type="button" className="flex min-h-11 items-center text-sm text-accent" onClick={() => navigate('/progress')}>Szczegóły <ChevronRight size={16} /></button>}>
         Progres
       </SectionTitle>
       <Card data-testid="progress-summary">

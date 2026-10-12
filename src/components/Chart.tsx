@@ -213,7 +213,7 @@ export function Chart({
         ) : (
           <span />
         )}
-        <button type="button" onClick={() => setTable((t) => !t)} className="min-h-9 shrink-0 px-1 text-xs text-accent">
+        <button type="button" onClick={() => setTable((t) => !t)} className="min-h-11 shrink-0 px-2 text-xs text-accent">
           {table ? 'Ukryj tabelę' : 'Tabela'}
         </button>
       </div>

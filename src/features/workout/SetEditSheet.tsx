@@ -1,11 +1,23 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { RirTarget, SessionExercise, SetEntry } from '../../domain/types'
-import { deleteSet, saveSet } from '../../db/repo'
+import { deleteSet, saveSetDetailed, type SuggestionChange } from '../../db/repo'
+import { EXERCISES } from '../../domain/exercises'
+import { fmtKg } from '../../domain/progression'
 import { Button, Sheet, cx } from '../../components/ui'
 import { useFeedback } from '../../components/feedback'
 import { SetFields } from './SetFields'
 import { draftFromSet, normalizeDraft, validateDraft, type SetDraft } from './setDraft'
+
+/** Human-readable effect of an edit on load proposals. */
+export function describeChanges(changes: SuggestionChange[]): string[] {
+  return changes.map((c) => {
+    const name = EXERCISES[c.exerciseId].name
+    if (c.kind === 'withdrawn') return `Propozycja zwiększenia ciężaru (${name}) wycofana — wyniki nie spełniają już kryteriów.`
+    const what = `${fmtKg(c.suggestion.fromWeightKg)} → ${fmtKg(c.suggestion.toWeightKg)}`
+    return c.kind === 'created' ? `Nowa propozycja (${name}): ${what}.` : `Propozycja (${name}) zaktualizowana: ${what} — zdecyduj ponownie.`
+  })
+}
 
 export function SetEditSheet({
   set,
@@ -30,8 +42,8 @@ export function SetEditSheet({
     if (err) return toast(err, 'error')
     setBusy(true)
     try {
-      await saveSet({ ...set, ...normalizeDraft(ex, draft) })
-      toast('Zmiany zapisane', 'success')
+      const { changes } = await saveSetDetailed({ ...set, ...normalizeDraft(ex, draft) })
+      toast(['Zmiany zapisane.', ...describeChanges(changes)].join(' '), 'success')
       onClose()
     } catch (e) {
       toast(`Nie udało się zapisać zmian: ${(e as Error).message}. Dane formularza są zachowane — spróbuj ponownie.`, 'error')
@@ -43,8 +55,8 @@ export function SetEditSheet({
   const remove = async () => {
     if (!(await confirm({ title: 'Usunąć serię?', body: `${ex.name} · ${label}. Tej operacji nie można cofnąć.`, confirmLabel: 'Usuń', danger: true }))) return
     try {
-      await deleteSet(set.id)
-      toast('Seria usunięta', 'info')
+      const changes = await deleteSet(set.id)
+      toast(['Seria usunięta.', ...describeChanges(changes)].join(' '), 'info')
       onClose()
     } catch (e) {
       toast(`Nie udało się usunąć serii: ${(e as Error).message}`, 'error')

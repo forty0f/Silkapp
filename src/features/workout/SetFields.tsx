@@ -14,7 +14,7 @@ export function RirPicker({ value, onChange, target }: { value: number | null; o
         <span>RIR — powtórzenia w zapasie</span>
         {target && <span className="text-faint">cel {target.min === target.max ? target.min : `${target.min}–${target.max}`}</span>}
       </div>
-      <div className="grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="RIR">
+      <div className="grid grid-cols-6 gap-1" role="radiogroup" aria-label="RIR">
         {RIR_OPTIONS.map((r) => {
           const on = value === r
           const inTarget = target && r >= target.min && r <= target.max

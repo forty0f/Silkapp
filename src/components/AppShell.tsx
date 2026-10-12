@@ -13,14 +13,15 @@ const TABS = [
   { path: '/settings', label: 'Ustawienia', icon: Settings },
 ]
 
-function UpdatePrompt() {
+function UpdatePrompt({ hidden }: { hidden: boolean }) {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({ immediate: true })
-  if (!needRefresh) return null
+  // Never interrupt an active workout; the prompt comes back on other screens.
+  if (!needRefresh || hidden) return null
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4">
+    <div className="px-safe fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center">
       <div className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-accent/30 bg-surface-2 p-3 shadow-2xl shadow-black/50">
         <p className="min-w-0 flex-1 text-sm">Dostępna nowa wersja aplikacji. Dane treningowe pozostaną bez zmian.</p>
         <Button size="sm" variant="ghost" onClick={() => setNeedRefresh(false)}>
@@ -53,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       {!inWorkout && (
-        <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-bg/92 backdrop-blur-xl" aria-label="Nawigacja główna">
+        <nav className="pb-safe px-safe fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-bg/92 backdrop-blur-xl" aria-label="Nawigacja główna">
           <div className="mx-auto flex max-w-2xl">
             {TABS.map((t) => {
               const Icon = t.icon
@@ -74,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </nav>
       )}
-      <UpdatePrompt />
+      <UpdatePrompt hidden={inWorkout} />
     </div>
   )
 }

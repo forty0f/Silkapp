@@ -16,6 +16,8 @@ export function unlockAudio() {
 export function beep(times = 2) {
   try {
     if (!ctx) return
+    // iOS suspends ("interrupted") the context in the background; try to resume.
+    if (ctx.state !== 'running') void ctx.resume().catch(() => {})
     for (let i = 0; i < times; i++) {
       const t = ctx.currentTime + i * 0.28
       const osc = ctx.createOscillator()

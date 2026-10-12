@@ -68,6 +68,8 @@ export interface Segment {
 }
 
 export interface SolvedFigure {
+  /** Named joints (near side unless suffixed with 2 / L / R) for verification. */
+  joints: Record<string, Pt>
   segments: Segment[]
   head: Pt
   hands: Pt[]
@@ -84,26 +86,30 @@ function solveSide(p: SidePose): SolvedFigure {
   const shoulder = add(p.hip, scale(vec(p.torso), L.torso))
   const head = add(shoulder, scale(vec(p.torso + (p.headTilt ?? 0)), L.neck))
   const segs: Segment[] = []
-  const leg = (ankleIn: Pt, bend: 1 | -1, footAngle: number, layer: Segment['layer']) => {
+  const joints: Record<string, Pt> = { hip: p.hip, shoulder, head }
+  const leg = (ankleIn: Pt, bend: 1 | -1, footAngle: number, layer: Segment['layer'], suffix: string) => {
     const ankle = reach(p.hip, ankleIn, L.thigh + L.shin - 0.01)
     const knee = ik(p.hip, ankle, L.thigh, L.shin, bend)
+    const toe = add(ankle, scale(vec(footAngle), 12))
     segs.push({ a: p.hip, b: knee, w: 11, layer }, { a: knee, b: ankle, w: 9, layer })
-    segs.push({ a: ankle, b: add(ankle, scale(vec(footAngle), 12)), w: 6, layer })
+    segs.push({ a: ankle, b: toe, w: 6, layer })
+    Object.assign(joints, { [`knee${suffix}`]: knee, [`ankle${suffix}`]: ankle, [`toe${suffix}`]: toe })
   }
-  const arm = (handIn: Pt, bend: 1 | -1, layer: Segment['layer']) => {
+  const arm = (handIn: Pt, bend: 1 | -1, layer: Segment['layer'], suffix: string) => {
     const hand = reach(shoulder, handIn, L.upperArm + L.forearm - 0.01)
     const elbow = ik(shoulder, hand, L.upperArm, L.forearm, bend)
     segs.push({ a: shoulder, b: elbow, w: 8, layer }, { a: elbow, b: hand, w: 7, layer })
+    Object.assign(joints, { [`elbow${suffix}`]: elbow, [`hand${suffix}`]: hand })
     return hand
   }
   const hands: Pt[] = []
-  if (p.ankle2) leg(p.ankle2, p.knee2 ?? p.knee, p.foot2 ?? p.foot ?? 90, 'far')
-  if (p.hand2) hands.push(arm(p.hand2, p.elbow2 ?? p.elbow, 'far'))
+  if (p.ankle2) leg(p.ankle2, p.knee2 ?? p.knee, p.foot2 ?? p.foot ?? 90, 'far', '2')
+  if (p.hand2) hands.push(arm(p.hand2, p.elbow2 ?? p.elbow, 'far', '2'))
   segs.push({ a: p.hip, b: shoulder, w: 15, layer: 'body' })
   segs.push({ a: shoulder, b: add(shoulder, scale(vec(p.torso + (p.headTilt ?? 0)), 6)), w: 7, layer: 'body' })
-  leg(p.ankle, p.knee, p.foot ?? 90, 'near')
-  hands.unshift(arm(p.hand, p.elbow, 'near'))
-  return { segments: segs, head, hands, hip: p.hip, shoulder }
+  leg(p.ankle, p.knee, p.foot ?? 90, 'near', '')
+  hands.unshift(arm(p.hand, p.elbow, 'near', ''))
+  return { joints, segments: segs, head, hands, hip: p.hip, shoulder }
 }
 
 function solveFront(p: FrontPose): SolvedFigure {
@@ -116,14 +122,17 @@ function solveFront(p: FrontPose): SolvedFigure {
     segs.push({ a: ankle, b: [ankle[0] + (hip[0] < 100 ? -7 : 7), ankle[1] + 1], w: 6, layer: 'body' })
   }
   const hands: Pt[] = []
-  for (const [s, h, bend] of [[sL, p.handL, 1], [sR, p.handR, -1]] as [Pt, Pt, 1 | -1][]) {
+  const joints: Record<string, Pt> = { shoulderL: sL, shoulderR: sR }
+  for (const [s, h, bend, side] of [[sL, p.handL, 1, 'L'], [sR, p.handR, -1, 'R']] as [Pt, Pt, 1 | -1, string][]) {
     const hand = reach(s, h, 49.9)
     const elbow = ik(s, hand, L.upperArm, L.forearm, bend)
     segs.push({ a: s, b: elbow, w: 8, layer: 'near' }, { a: elbow, b: hand, w: 7, layer: 'near' })
     hands.push(hand)
+    Object.assign(joints, { [`elbow${side}`]: elbow, [`hand${side}`]: hand })
   }
   segs.push({ a: [100, 28], b: [100, 20], w: 7, layer: 'body' })
   return {
+    joints,
     segments: segs,
     head: [100, 15],
     hands,

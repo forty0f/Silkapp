@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Minus, Plus, X } from 'lucide-react'
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -22,7 +22,7 @@ export function Button({
   children,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = { sm: 'min-h-10 px-3 text-sm rounded-xl', md: 'min-h-12 px-4 rounded-2xl', lg: 'min-h-14 px-5 text-lg rounded-2xl' }
+  const sizes = { sm: 'min-h-11 px-3 text-sm rounded-xl', md: 'min-h-12 px-4 rounded-2xl', lg: 'min-h-14 px-5 text-lg rounded-2xl' }
   return (
     <button
       type="button"
@@ -76,6 +76,51 @@ export function WorkoutBadge({ type, size = 'md' }: { type: 'A' | 'B'; size?: 's
   )
 }
 
+const toText = (v: number | null) => (v == null ? '' : String(v).replace('.', ','))
+const parseText = (t: string): number | null | undefined => {
+  const n = t.replace(',', '.').trim()
+  if (n === '') return null
+  const v = Number(n)
+  return Number.isFinite(v) ? v : undefined
+}
+
+/**
+ * Text-backed numeric input: keeps what the user typed (e.g. "12," while
+ * entering 12,5 on the Polish iOS keypad) and only reports parsed numbers.
+ */
+function NumberText({ value, onChange, min, max, decimals, label, testId }: { value: number | null; onChange: (v: number | null) => void; min: number; max: number; decimals: boolean; label: string; testId?: string }) {
+  const [text, setText] = useState(() => toText(value))
+  // Re-sync when the value changes from outside (+/- buttons, prefill).
+  const [synced, setSynced] = useState(value)
+  if (value !== synced) {
+    setSynced(value)
+    if (parseText(text) !== value) setText(toText(value))
+  }
+  return (
+    <input
+      data-testid={testId}
+      aria-label={label}
+      inputMode={decimals ? 'decimal' : 'numeric'}
+      enterKeyHint="done"
+      autoComplete="off"
+      className="tnum w-full min-w-0 bg-transparent text-center text-2xl font-semibold outline-none"
+      value={text}
+      placeholder="–"
+      onChange={(e) => {
+        const raw = decimals ? e.target.value.replace(/[^\d.,]/g, '') : e.target.value.replace(/\D/g, '')
+        setText(raw)
+        const v = parseText(raw)
+        if (v === undefined) return
+        const clamped = v == null ? null : Math.min(max, Math.max(min, v))
+        setSynced(clamped)
+        onChange(clamped)
+      }}
+      onBlur={() => setText(toText(value))}
+      onFocus={(e) => e.target.select()}
+    />
+  )
+}
+
 /** Large +/- number control tuned for one-handed use with sweaty fingers. */
 export function Stepper({
   label,
@@ -111,21 +156,7 @@ export function Stepper({
           <Minus size={20} />
         </button>
         <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1 py-2">
-          <input
-            data-testid={testId}
-            aria-label={label}
-            inputMode={decimals ? 'decimal' : 'numeric'}
-            className="tnum w-full min-w-0 bg-transparent text-center text-2xl font-semibold outline-none"
-            value={value == null ? '' : String(value).replace('.', ',')}
-            placeholder="–"
-            onChange={(e) => {
-              const t = e.target.value.replace(',', '.').trim()
-              if (t === '') return onChange(null)
-              const v = Number(t)
-              if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v)))
-            }}
-            onFocus={(e) => e.target.select()}
-          />
+          <NumberText value={value} onChange={onChange} min={min} max={max} decimals={decimals} label={label} testId={testId} />
           {unit && <span className="shrink-0 pr-1 text-xs text-faint">{unit}</span>}
         </div>
         <button type="button" aria-label={`${label}: więcej`} className="flex w-12 shrink-0 items-center justify-center text-muted active:bg-surface-3" onClick={() => bump(step)}>

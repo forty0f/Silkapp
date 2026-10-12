@@ -38,6 +38,15 @@ export function fmtClock(totalSec: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`
 }
 
+/** Stopwatch format; switches to h:mm:ss after an hour (e.g. a workout resumed later). */
+export function fmtElapsed(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec))
+  if (s < 3600) return fmtClock(s)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 export function fmtDuration(ms: number): string {
   const min = Math.round(ms / 60000)
   if (min < 60) return `${min} min`
