@@ -64,13 +64,17 @@ export function Chart({
   const [hover, setHover] = useState<number | null>(null)
   const [table, setTable] = useState(false)
 
+  const hasData = series.some((s) => s.points.some((p) => p.value != null))
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // Measure synchronously before the first paint: waiting for the (async)
+    // ResizeObserver let the SVG briefly overflow narrow screens.
+    setWidth(Math.max(200, Math.floor(el.getBoundingClientRect().width)))
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(200, Math.floor(e.contentRect.width))))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [hasData])
 
   const n = Math.max(...series.map((s) => s.points.length), 0)
   const values = series.flatMap((s) => s.points.map((p) => p.value)).filter((v): v is number => v != null)

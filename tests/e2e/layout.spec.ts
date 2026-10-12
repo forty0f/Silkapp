@@ -54,3 +54,23 @@ test('with history: screens, charts and active workout fit the viewport', async 
   await page.screenshot({ path: `test-results/screens/workout-${info.project.name}.png` })
   expect(errors).toEqual([])
 })
+
+test('charts never overflow horizontally, not even while first rendering', async ({ page }) => {
+  await importSeed(page)
+  for (const tab of ['Ćwiczenia', 'Ciało', 'Tygodnie']) {
+    await page.goto('./#/progress')
+    await expect(page.getByRole('tab', { name: tab })).toBeVisible()
+    const maxOverflow = await page.evaluate(async (name) => {
+      const samples: number[] = []
+      const sample = () => samples.push(document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      const obs = new MutationObserver(sample)
+      obs.observe(document.body, { subtree: true, childList: true, attributes: true })
+      Array.from(document.querySelectorAll('[role=tab]')).find((t) => t.textContent === name)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await new Promise((r) => setTimeout(r, 400))
+      obs.disconnect()
+      sample()
+      return Math.max(...samples)
+    }, tab)
+    expect(maxOverflow, `transient overflow on progress/${tab}`).toBeLessThanOrEqual(0)
+  }
+})
