@@ -111,3 +111,45 @@ test('active-workout controls meet touch-target sizes', async ({ page }, info) =
   )
   expect(small, `small targets on ${info.project.name}`).toEqual([])
 })
+
+test('RIR starts unassessed for every set (target is shown, not pre-selected)', async ({ page }) => {
+  await page.goto('./')
+  await page.getByTestId('start-workout').click()
+  const checked = page.locator('[role="radiogroup"][aria-label="RIR"] [aria-checked="true"]')
+  await expect(checked).toHaveCount(0)
+  await page.getByTestId('input-weight').fill('16')
+  await page.getByTestId('rir-3').click()
+  await page.getByTestId('save-set').click()
+  await expect(page.getByTestId('set-row')).toContainText('RIR 3')
+  // Next set: RIR from the previous set is not carried over.
+  await expect(checked).toHaveCount(0)
+  await page.getByTestId('save-set').click() // saving without RIR is allowed ("nieoceniony")
+  await page.getByRole('button', { name: /^1\. Przysiad goblet/ }).click()
+  await expect(page.getByTestId('set-row').nth(1)).not.toContainText('RIR')
+})
+
+test('switching exercises keeps each unsaved form', async ({ page }) => {
+  await page.goto('./')
+  await page.getByTestId('start-workout').click()
+  await page.getByTestId('input-weight').fill('14')
+  await page.getByTestId('input-reps').fill('11')
+  await page.getByTestId('rir-2').click()
+
+  await page.getByRole('button', { name: /^2\. Wyciskanie hantli na płasko/ }).click()
+  await expect(page.getByTestId('exercise-name')).toHaveText('Wyciskanie hantli na płasko')
+  await page.getByTestId('input-weight').fill('12')
+  await page.getByTestId('input-reps').fill('9')
+
+  await page.getByRole('button', { name: /^1\. Przysiad goblet/ }).click()
+  await expect(page.getByTestId('input-weight')).toHaveValue('14')
+  await expect(page.getByTestId('input-reps')).toHaveValue('11')
+  await expect(page.getByTestId('rir-2')).toHaveAttribute('aria-checked', 'true')
+
+  await page.getByRole('button', { name: /^2\. Wyciskanie hantli na płasko/ }).click()
+  await expect(page.getByTestId('input-weight')).toHaveValue('12')
+  await expect(page.getByTestId('input-reps')).toHaveValue('9')
+
+  // Survives a reload too.
+  await page.reload()
+  await expect(page.getByTestId('input-weight')).toHaveValue('12')
+})

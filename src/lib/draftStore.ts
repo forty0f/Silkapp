@@ -1,40 +1,50 @@
 // Unsaved set-form input survives the app being closed or killed by iOS in the
-// background. This is a convenience cache only — logged sets live in IndexedDB.
-const KEY = 'silk-set-draft'
+// background, and switching between exercises. One entry per form (session +
+// exercise + set type + set number), so drafts never overwrite each other.
+// This is a convenience cache only — logged sets live in IndexedDB.
+const KEY = 'silk-set-drafts'
 const MAX_AGE_MS = 12 * 60 * 60 * 1000
 
-interface Stored<T> {
-  key: string
+interface Entry {
   savedAt: number
-  draft: T
+  draft: unknown
+}
+
+function readAll(): Record<string, Entry> {
+  try {
+    const raw = localStorage.getItem(KEY)
+    const all = raw ? (JSON.parse(raw) as Record<string, Entry>) : {}
+    const now = Date.now()
+    for (const k of Object.keys(all)) if (now - all[k].savedAt > MAX_AGE_MS) delete all[k]
+    return all
+  } catch {
+    return {}
+  }
+}
+
+function writeAll(all: Record<string, Entry>) {
+  try {
+    if (Object.keys(all).length === 0) localStorage.removeItem(KEY)
+    else localStorage.setItem(KEY, JSON.stringify(all))
+  } catch {
+    // storage unavailable (private mode / quota) — drafts simply aren't kept
+  }
 }
 
 export function loadDraft<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw) as Stored<T>
-    if (s.key !== key || Date.now() - s.savedAt > MAX_AGE_MS) return null
-    return s.draft
-  } catch {
-    return null
-  }
+  return (readAll()[key]?.draft as T | undefined) ?? null
 }
 
 export function storeDraft<T>(key: string, draft: T) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ key, savedAt: Date.now(), draft } satisfies Stored<T>))
-  } catch {
-    // storage unavailable (private mode / quota) — draft simply isn't kept
-  }
+  const all = readAll()
+  all[key] = { savedAt: Date.now(), draft }
+  writeAll(all)
 }
 
+/** Removes one form's draft, or all drafts when called without a key. */
 export function clearDraft(key?: string) {
-  try {
-    if (!key) return localStorage.removeItem(KEY)
-    const raw = localStorage.getItem(KEY)
-    if (raw && (JSON.parse(raw) as Stored<unknown>).key === key) localStorage.removeItem(KEY)
-  } catch {
-    // ignore
-  }
+  if (!key) return writeAll({})
+  const all = readAll()
+  delete all[key]
+  writeAll(all)
 }

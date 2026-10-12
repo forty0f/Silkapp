@@ -245,3 +245,38 @@ describe('full backup round-trip (another device)', () => {
     expect(norm(restored)).toEqual(norm(original))
   })
 })
+
+describe('#3 reopenSession keeps suggestions consistent', () => {
+  it('reopening withdraws the pending suggestion derived from that session', async () => {
+    const s = await complete()
+    expect((await squatSugs()).filter((x) => x.status === 'pending')).toHaveLength(1)
+    await reopenSession(s.id)
+    expect((await squatSugs()).filter((x) => x.sourceSessionId === s.id)).toEqual([])
+  })
+
+  it('an accepted suggestion of a reopened session no longer drives the prefill', async () => {
+    const s = await complete({ weightKg: 16 })
+    await decideSuggestion((await squatSugs())[0].id, true)
+    expect(await preferredWeight('goblet-squat', await lastPerformance('goblet-squat'))).toBe(18)
+    await reopenSession(s.id)
+    expect(await preferredWeight('goblet-squat', await lastPerformance('goblet-squat'))).toBeNull()
+  })
+
+  it('reopening restores the suggestion of the previous completed performance', async () => {
+    const s1 = await complete()
+    await complete() // B
+    const s3 = await complete()
+    await reopenSession(s3.id)
+    const pending = (await squatSugs()).filter((x) => x.status === 'pending')
+    expect(pending.map((x) => x.sourceSessionId)).toEqual([s1.id])
+  })
+
+  it('finishing again re-evaluates with the edited results', async () => {
+    const s = await complete()
+    await reopenSession(s.id)
+    const set = (await setsForSession(s.id)).find((x) => x.exerciseId === 'goblet-squat')!
+    await saveSet({ ...set, reps: 9 })
+    await finishSession(s.id)
+    expect((await squatSugs()).filter((x) => x.sourceSessionId === s.id)).toEqual([])
+  })
+})

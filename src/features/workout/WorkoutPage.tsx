@@ -393,7 +393,7 @@ function ExercisePanel({
             ex={ex}
             type={type}
             isExtra={isExtra}
-            initial={withCarry(prefillDraft({ ex, type, sessionSets: sets, last: ctx.last, preferredWeight: ctx.preferred, targetRir: session.targetRir }), type === carry?.type ? carry : null)}
+            initial={withCarry(prefillDraft({ ex, type, sessionSets: sets, last: ctx.last, preferredWeight: ctx.preferred }), type === carry?.type ? carry : null)}
             weightStep={settings.weightStepKg}
             onSaved={(completedExercise, used) => {
               setCarry(used)

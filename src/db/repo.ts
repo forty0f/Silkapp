@@ -283,8 +283,12 @@ export async function reconcileExercise(exerciseId: ExerciseId): Promise<Suggest
   const changes: SuggestionChange[] = []
   const latest = await lastPerformance(exerciseId)
   const all = await db.suggestions.where('exerciseId').equals(exerciseId).toArray()
+  const completedIds = new Set((await db.sessions.where('status').equals('completed').primaryKeys()) as string[])
   for (const s of all) {
-    if (s.status === 'pending' && s.sourceSessionId !== latest?.sessionId) {
+    // A suggestion whose source session is not completed (reopened or gone) has no valid basis,
+    // whatever its status; pending ones from older sessions are superseded.
+    const orphaned = !completedIds.has(s.sourceSessionId)
+    if (orphaned || (s.status === 'pending' && s.sourceSessionId !== latest?.sessionId)) {
       await db.suggestions.delete(s.id)
       changes.push({ exerciseId, kind: 'withdrawn', suggestion: s })
     }
@@ -292,7 +296,7 @@ export async function reconcileExercise(exerciseId: ExerciseId): Promise<Suggest
   if (!latest) return changes
   const settings = await getSettings()
   const ev = evaluatePerformance(latest, settings.weightStepKg)
-  const existing = all.find((s) => s.sourceSessionId === latest.sessionId)
+  const existing = all.find((s) => s.sourceSessionId === latest.sessionId && completedIds.has(s.sourceSessionId))
   const qualifies = (ev.status === 'increase' || ev.status === 'unify') && ev.workingWeightKg != null && ev.suggestedWeightKg != null
   const now = nowIso()
   if (qualifies) {
@@ -337,11 +341,18 @@ export async function reconcileAll(): Promise<SuggestionChange[]> {
 
 /** Reopens a completed session (e.g. finished by mistake). */
 export async function reopenSession(id: string): Promise<void> {
-  await db.transaction('rw', db.sessions, async () => {
-    const other = await getInProgressSession()
-    if (other && other.id !== id) throw new Error('Najpierw zakończ lub odrzuć trwający trening.')
-    await db.sessions.update(id, { status: 'in_progress', finishedAt: null, updatedAt: nowIso() })
-  })
+  await withDbRetry(() =>
+    db.transaction('rw', [db.sessions, db.sets, db.suggestions, db.settings], async () => {
+      const other = await getInProgressSession()
+      if (other && other.id !== id) throw new Error('Najpierw zakończ lub odrzuć trwający trening.')
+      const session = await db.sessions.get(id)
+      if (!session) throw new Error('Sesja nie istnieje.')
+      await db.sessions.update(id, { status: 'in_progress', finishedAt: null, updatedAt: nowIso() })
+      // Suggestions derived from this session no longer stand while it is being edited;
+      // the previous completed performance becomes the basis again until it is finished.
+      for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)
+    }),
+  )
 }
 
 export async function deleteSession(id: string): Promise<void> {

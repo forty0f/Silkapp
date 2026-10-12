@@ -2,6 +2,7 @@ name: Deploy to GitHub Pages
 
 # Production deploys come only from `main`. Development happens on other
 # branches and reaches `main` through reviewed pull requests.
+# Deploy requires: lint, typecheck, unit tests, build checks AND Playwright E2E.
 on:
   push:
     branches: [main]
@@ -57,8 +58,33 @@ jobs:
         with:
           path: dist
 
+  # Full Playwright suite against a build served under /Silkapp/ (the production
+  # path) at 6 viewport widths. Deploy only happens if this passes too.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:pages
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
+
   deploy:
-    needs: build
+    needs: [build, e2e]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

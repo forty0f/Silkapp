@@ -9,35 +9,34 @@ const exA = buildSessionExercises(plan, 'A', { week: 2, phase: 'adaptation' })
 const squat = exA[0]
 const row = exA[2]
 const plank = exA[5]
-const rir = { min: 3, max: 3 }
 
 describe('prefillDraft', () => {
-  it('first ever set: preferred weight, bottom of range, target RIR', () => {
-    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last: null, preferredWeight: null, targetRir: rir })
-    expect(d).toMatchObject({ weightKg: null, reps: 8, rir: 3, techniqueOk: true })
+  it('first ever set: preferred weight, bottom of range, RIR not assessed', () => {
+    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last: null, preferredWeight: null })
+    expect(d).toMatchObject({ weightKg: null, reps: 8, rir: null, techniqueOk: true })
   })
   it('uses last session reps for the matching set and the preferred (accepted) weight', () => {
     const last = perf([set({ reps: 11 }), set({ reps: 10 })])
-    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last, preferredWeight: 18, targetRir: rir })
+    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last, preferredWeight: 18 })
     expect(d).toMatchObject({ weightKg: 18, reps: 11 })
   })
   it('copies the previous set of today', () => {
     const today = [set({ sessionId: 'x', weightKg: 20, reps: 9, rir: 2 })]
-    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: today, last: null, preferredWeight: 16, targetRir: rir })
-    expect(d).toMatchObject({ weightKg: 20, reps: 9, rir: 2 })
+    const d = prefillDraft({ ex: squat, type: 'working', sessionSets: today, last: null, preferredWeight: 16 })
+    expect(d).toMatchObject({ weightKg: 20, reps: 9, rir: null })
   })
   it('warm-up suggests ~50% of the working load and no RIR', () => {
-    const d = prefillDraft({ ex: squat, type: 'warmup', sessionSets: [], last: null, preferredWeight: 20, targetRir: rir })
+    const d = prefillDraft({ ex: squat, type: 'warmup', sessionSets: [], last: null, preferredWeight: 20 })
     expect(d).toMatchObject({ weightKg: 10, reps: 8, rir: null })
   })
   it('unilateral and timed exercises use their own fields', () => {
-    expect(prefillDraft({ ex: row, type: 'working', sessionSets: [], last: null, preferredWeight: 16, targetRir: rir })).toMatchObject({ reps: null, repsLeft: 8, repsRight: 8 })
-    expect(prefillDraft({ ex: plank, type: 'working', sessionSets: [], last: null, preferredWeight: null, targetRir: rir })).toMatchObject({ weightKg: null, durationSec: 30, rir: null })
+    expect(prefillDraft({ ex: row, type: 'working', sessionSets: [], last: null, preferredWeight: 16 })).toMatchObject({ reps: null, repsLeft: 8, repsRight: 8 })
+    expect(prefillDraft({ ex: plank, type: 'working', sessionSets: [], last: null, preferredWeight: null })).toMatchObject({ weightKg: null, durationSec: 30, rir: null })
   })
 })
 
 describe('validate / normalize', () => {
-  const base = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last: null, preferredWeight: 16, targetRir: rir })
+  const base = prefillDraft({ ex: squat, type: 'working', sessionSets: [], last: null, preferredWeight: 16 })
   it('requires weight for loaded exercises and both sides for unilateral', () => {
     expect(validateDraft(squat, { ...base, weightKg: null })).toMatch(/ciężar/)
     expect(validateDraft(squat, base)).toBeNull()

@@ -9,7 +9,7 @@ Docelowy adres: **https://forty0f.github.io/Silkapp/**
 | `main` | **produkcja** — każdy push (zwykle merge PR) uruchamia `.github/workflows/deploy-pages.yml` i publikuje aplikację |
 | inne (np. `claude/fbw-pwa-app`) | rozwój; zmiany trafiają na `main` przez pull request |
 
-Workflow: `npm ci` → lint → typecheck → testy jednostkowe → `configure-pages` → build z `BASE_PATH=/Silkapp/` → kontrola, że zasoby, manifest i service worker są pod tą ścieżką oraz że w buildzie nie ma map źródeł, `.env` ani danych testowych → `upload-pages-artifact` → `deploy-pages`. Deploy uruchamia się tylko wtedy, gdy wszystkie kroki przejdą, i tylko z `main`. Uprawnienia `pages: write` i `id-token: write` ma wyłącznie zadanie deploy. Można też uruchomić workflow ręcznie (workflow_dispatch); z gałęzi innej niż `main` wykona się tylko build bez publikacji.
+Workflow: `npm ci` → lint → typecheck → testy jednostkowe → (równolegle) pełne E2E Playwright pod `/Silkapp/` na 6 szerokościach → `configure-pages` → build z `BASE_PATH=/Silkapp/` → kontrola, że zasoby, manifest i service worker są pod tą ścieżką oraz że w buildzie nie ma map źródeł, `.env` ani danych testowych → `upload-pages-artifact` → `deploy-pages`. Deploy uruchamia się tylko wtedy, gdy wszystkie kroki przejdą, i tylko z `main`. Uprawnienia `pages: write` i `id-token: write` ma wyłącznie zadanie deploy. Można też uruchomić workflow ręcznie (workflow_dispatch); z gałęzi innej niż `main` wykona się tylko build bez publikacji.
 
 ## Wymagania po stronie GitHub (jednorazowo, ręcznie w ustawieniach)
 

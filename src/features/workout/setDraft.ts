@@ -1,5 +1,5 @@
 import type { ExercisePerformance } from '../../domain/progression'
-import type { RirTarget, SessionExercise, SetEntry, SetStatus, SetType } from '../../domain/types'
+import type { SessionExercise, SetEntry, SetStatus, SetType } from '../../domain/types'
 
 export interface SetDraft {
   type: SetType
@@ -42,9 +42,8 @@ export function prefillDraft(args: {
   sessionSets: SetEntry[]
   last: ExercisePerformance | null
   preferredWeight: number | null
-  targetRir: RirTarget
 }): SetDraft {
-  const { ex, type, sessionSets, last, preferredWeight, targetRir } = args
+  const { ex, type, sessionSets, last, preferredWeight } = args
   const mine = sessionSets.filter((s) => s.exerciseId === ex.exerciseId)
   const base: SetDraft = { type, status: 'done', weightKg: null, reps: null, repsLeft: null, repsRight: null, durationSec: null, rir: null, techniqueOk: true, note: '' }
 
@@ -74,21 +73,23 @@ export function prefillDraft(args: {
     repsLeft: ex.perSide ? (ref?.repsLeft ?? ex.repMin) : null,
     repsRight: ex.perSide ? (ref?.repsRight ?? ex.repMin) : null,
     durationSec: ex.unit === 'seconds' ? (ref?.durationSec ?? ex.repMin) : null,
-    rir: ex.unit === 'seconds' ? null : (prev?.rir ?? targetRir.max),
+    // RIR is the user's own rating of each set — never pre-filled with the target or a previous set.
+    rir: null,
   }
 }
 
 export function validateDraft(ex: SessionExercise, d: SetDraft): string | null {
   if (d.status === 'skipped') return null
-  const intOk = (v: number | null, max: number) => v != null && Number.isFinite(v) && v >= 0 && v <= max
+  const positiveInt = (v: number | null, max: number) => v != null && Number.isInteger(v) && v >= 1 && v <= max
   if (ex.loaded && d.weightKg == null) return 'Podaj ciężar (masa jednego hantla).'
-  if (d.weightKg != null && (d.weightKg < 0 || d.weightKg > 300)) return 'Ciężar poza zakresem 0–300 kg.'
-  if (ex.unit === 'seconds') return intOk(d.durationSec, 3600) && d.durationSec! > 0 ? null : 'Podaj czas w sekundach.'
+  if (d.weightKg != null && (!Number.isFinite(d.weightKg) || d.weightKg < 0 || d.weightKg > 300)) return 'Ciężar poza zakresem 0–300 kg.'
+  if (d.rir != null && !(Number.isInteger(d.rir) && d.rir >= 0 && d.rir <= 10)) return 'RIR musi być liczbą całkowitą 0–10 albo pozostać nieoceniony.'
+  if (ex.unit === 'seconds') return positiveInt(d.durationSec, 3600) ? null : 'Podaj czas w pełnych sekundach (co najmniej 1 s).'
   if (ex.perSide) {
-    if (!intOk(d.repsLeft, 200) || !intOk(d.repsRight, 200)) return 'Podaj powtórzenia dla lewej i prawej strony.'
+    if (!positiveInt(d.repsLeft, 200) || !positiveInt(d.repsRight, 200)) return 'Podaj powtórzenia (liczba całkowita ≥ 1) dla lewej i prawej strony.'
     return null
   }
-  return intOk(d.reps, 200) ? null : 'Podaj liczbę powtórzeń.'
+  return positiveInt(d.reps, 200) ? null : 'Podaj liczbę powtórzeń (liczba całkowita ≥ 1).'
 }
 
 /** Clears fields that do not apply to the exercise before saving. */
