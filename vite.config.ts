@@ -54,7 +54,11 @@ export default defineConfig({
     }),
   ],
   build: { chunkSizeWarningLimit: 800 },
-  preview: { https },
+  preview: {
+    https,
+    // Allow private test access: Tailscale (*.ts.net) and Bonjour LAN names (*.local).
+    allowedHosts: ['.ts.net', '.local'],
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],

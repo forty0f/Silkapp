@@ -86,7 +86,7 @@ Pierwsze uruchomienie Playwright lokalnie: `npx playwright install chromium`.
 
 ## Instalacja na iPhonie
 
-Service worker (praca offline) i instalacja działają tylko przez **zaufane HTTPS**. Wersję testową bez publikowania uruchomisz według [`docs/IPHONE_HTTPS_TEST.md`](docs/IPHONE_HTTPS_TEST.md): lokalny serwer z certyfikatem mkcert albo Tailscale Serve. Na docelowy prywatny hosting z HTTPS wgrywa się zawartość `dist/` (ścieżki są względne). *Aplikacja nie została nigdzie opublikowana.*
+Service worker (praca offline) i instalacja działają tylko przez **zaufane HTTPS**. Wersję testową bez publikowania uruchomisz według [`docs/IPHONE_HTTPS_TEST.md`](docs/IPHONE_HTTPS_TEST.md) (zalecane: Tailscale Serve; alternatywnie lokalny certyfikat mkcert). Na docelowy prywatny hosting z HTTPS wgrywa się zawartość `dist/` (ścieżki są względne). *Aplikacja nie została nigdzie opublikowana.*
 
 W skrócie: Safari → adres → **Udostępnij → Do ekranu początkowego** → uruchom z ikony, przejdź raz przez wszystkie zakładki online, potem zrób pierwszy eksport (**Ustawienia → Eksportuj dane → Zapisz plik → Zapisz w Plikach**). Dane aplikacji zainstalowanej z ikony są oddzielne od danych strony otwartej w Safari, a każdy adres (origin) ma własną bazę.
 
