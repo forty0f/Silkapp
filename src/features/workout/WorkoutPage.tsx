@@ -130,7 +130,7 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
           <div className="min-w-0 flex-1">
             <div className="truncate font-semibold leading-tight">Trening {session.workoutType}</div>
             <div className="truncate text-xs text-muted">
-              Tydz. {session.week} · sesja {session.slot}/3 · RIR {formatRir(session.targetRir)}
+              Tydz. {session.week} · {session.slot}/3 · <span className="text-accent">RIR {formatRir(session.targetRir)}</span>
             </div>
           </div>
           <div className="tnum text-right text-sm text-muted" aria-label="Czas treningu">
@@ -269,6 +269,8 @@ function ExercisePanel({
   const { toast } = useFeedback()
   const [type, setType] = useState<SetType>('working')
   const [editing, setEditing] = useState<SetEntry | null>(null)
+  // Last values typed in the form; fills gaps after a skipped set.
+  const [carry, setCarry] = useState<SetDraft | null>(null)
 
   const ctx = useLiveQuery(async () => {
     const last = await lastPerformance(ex.exerciseId, session.id)
@@ -287,7 +289,7 @@ function ExercisePanel({
     <div className="mt-3 space-y-3">
       <Card className="p-3">
         <div className="flex gap-3">
-          <button type="button" onClick={onOpenAtlas} className="relative h-24 w-28 shrink-0 overflow-hidden rounded-xl border border-line/60 bg-[#0d1628]" aria-label={`Technika: ${ex.name}`}>
+          <button type="button" onClick={onOpenAtlas} className="relative h-20 w-24 shrink-0 overflow-hidden min-[375px]:h-24 min-[375px]:w-28 rounded-xl border border-line/60 bg-[#0d1628]" aria-label={`Technika: ${ex.name}`}>
             <ExerciseFigure exerciseId={ex.exerciseId} phase="end" className="h-full w-full" />
             <span className="absolute bottom-1 right-1 rounded-md bg-bg/80 p-1 text-accent">
               <BookOpen size={14} />
@@ -391,9 +393,10 @@ function ExercisePanel({
             ex={ex}
             type={type}
             isExtra={isExtra}
-            initial={prefillDraft({ ex, type, sessionSets: sets, last: ctx.last, preferredWeight: ctx.preferred, targetRir: session.targetRir })}
+            initial={withCarry(prefillDraft({ ex, type, sessionSets: sets, last: ctx.last, preferredWeight: ctx.preferred, targetRir: session.targetRir }), type === carry?.type ? carry : null)}
             weightStep={settings.weightStepKg}
-            onSaved={(completedExercise) => {
+            onSaved={(completedExercise, used) => {
+              setCarry(used)
               if (type === 'warmup') return
               if (completedExercise) onAdvance()
             }}
@@ -405,6 +408,18 @@ function ExercisePanel({
       {editing && <SetEditSheet set={editing} ex={ex} weightStep={settings.weightStepKg} targetRir={session.targetRir} onClose={() => setEditing(null)} />}
     </div>
   )
+}
+
+function withCarry(d: SetDraft, carry: SetDraft | null): SetDraft {
+  if (!carry) return d
+  return {
+    ...d,
+    weightKg: d.weightKg ?? carry.weightKg,
+    reps: d.reps ?? carry.reps,
+    repsLeft: d.repsLeft ?? carry.repsLeft,
+    repsRight: d.repsRight ?? carry.repsRight,
+    durationSec: d.durationSec ?? carry.durationSec,
+  }
 }
 
 function SetRow({ s, ex, label, warm = false, onClick }: { s: SetEntry; ex: SessionExercise; label: string; warm?: boolean; onClick: () => void }) {
@@ -440,7 +455,7 @@ function SetForm({
   initial: SetDraft
   weightStep: number
   workingCount: number
-  onSaved: (completedExercise: boolean) => void
+  onSaved: (completedExercise: boolean, used: SetDraft) => void
 }) {
   const [draft, setDraft] = useState<SetDraft>(initial)
   const [busy, setBusy] = useState(false)
@@ -460,7 +475,7 @@ function SetForm({
       )
       requestPersistence()
       const completed = type === 'working' && !isExtra && workingCount + 1 >= ex.plannedSets
-      onSaved(completed)
+      onSaved(completed, d)
       if (completed) toast(`${ex.name}: zaplanowane serie wykonane`, 'success')
     } catch (e) {
       toast(`Nie udało się zapisać serii: ${(e as Error).message}. Dane w formularzu zostały zachowane — spróbuj ponownie.`, 'error')
