@@ -54,8 +54,8 @@ Wszystkie 6 ćwiczeń z aktywnym timerem: pola ciężaru/powtórzeń/czasu i „
 | typecheck (tsc -b) | ✅ |
 | unit (vitest) | ✅ 155 passed, 1 skipped (było 138 z diagnostyką) |
 | build | ✅ |
-| E2E, base `/` (Chromium, 7 viewportów) | ✅ wynik w sekcji 6 |
-| E2E, base `/Silkapp/` (jak GitHub Pages) | ✅ wynik w sekcji 6 |
+| E2E, base `/` (Chromium, 7 viewportów) | ✅ 176 passed, 0 failed, 13 skipped (testy tylko dla Pages oraz test aktualizacji PWA uruchamiany raz) |
+| E2E, base `/Silkapp/` (jak GitHub Pages) | ✅ 183 passed, 0 failed, 6 skipped |
 | Safari / WebKit / iOS | **NIEPRZETESTOWANE** (brak WebKit w środowisku) |
 
 Nowe E2E (`tests/e2e/ergonomics.spec.ts`, ×7 viewportów): pola i zapis osiągalne bez przewijania (timer wył./wł.), każde z 6 ćwiczeń z timerem, żaden kontrolka nie zostaje trwale pod paskami, RIR nieoceniony, przełączanie ‹ ›, pominięcie i edycja serii, otwarta klawiatura (symulacja zmniejszonym viewportem), bardzo długie nazwy ćwiczeń (bez przepełnienia, nazwa ≤ 2 linie), powrót z tła (zegar przesunięty o 10:30 — timer i niezapisany formularz zachowane), brak chwilowego przepełnienia przy przełączaniu, ekran główny (tydzień wspomniany raz). Nowy projekt `w393-safe` (393×852 z wcięciami 59/34 px). Diagnostyka D1–D10 z gałęzi audytu zamieniona na `src/test/stage1.regression.test.ts`.
