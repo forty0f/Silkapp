@@ -6,13 +6,31 @@ import { expectNoHorizontalOverflow, importSeed, trackConsole } from './helpers'
  * Is the element fully inside the viewport and actually hit by a tap at its centre
  * (i.e. not hidden under the sticky header, the action bar or the rest timer)?
  */
-async function reachable(page: Page, testId: string): Promise<{ inView: boolean; hit: boolean }> {
+async function reachable(page: Page, testId: string): Promise<{ connected: boolean; inView: boolean; hit: boolean }> {
   return page.getByTestId(testId).first().evaluate((el) => {
+    // A node React already replaced reports an all-zero rect — never treat that as a layout result.
+    if (!el.isConnected) return { connected: false, inView: false, hit: false }
     const r = el.getBoundingClientRect()
     const inView = r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth
     const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-    return { inView, hit: !!top && (top === el || el.contains(top)) }
+    return { connected: true, inView, hit: !!top && (top === el || el.contains(top)) }
   })
+}
+
+/**
+ * Switches to exercise `i` (0-based) via its chip and waits until the NEW exercise is
+ * rendered and its form has loaded. The previous panel stays in the DOM for a moment
+ * after the click, so "a set label is visible" alone would still match the old one.
+ */
+async function openExercise(page: Page, i: number) {
+  const chip = page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) })
+  const name = (await chip.getAttribute('aria-label'))!.replace(/^\d+\. /, '').replace(/, \d+ z \d+ serii$/, '')
+  await chip.click()
+  await expect(chip).toHaveAttribute('aria-current', 'step')
+  await expect(page.getByTestId('exercise-name')).toHaveText(name)
+  await expect(page.getByTestId('exercise-card').locator('[aria-busy=true]')).toHaveCount(0)
+  await expect(page.getByTestId('exercise-card').getByTestId('set-label')).toBeVisible()
+  await expect(page.getByTestId('save-set')).toBeVisible()
 }
 
 /** Snapshot of everything that can cover a control, printed and attached when a check fails. */
@@ -62,14 +80,14 @@ async function diagnose(page: Page, testId: string) {
 
 async function expectReachable(page: Page, testId: string, label: string) {
   const result = await reachable(page, testId)
-  if (!result.inView || !result.hit) {
+  if (!result.connected || !result.inView || !result.hit) {
     const info = await diagnose(page, testId)
     const name = `diag-${testId}-${label.replace(/\W+/g, '_')}`
     console.log(`[DIAG] ${test.info().project.name} ${label} ${testId}: ${JSON.stringify(info)}`)
     await test.info().attach(`${name}.json`, { body: JSON.stringify(info, null, 2), contentType: 'application/json' })
     await test.info().attach(`${name}.png`, { body: await page.screenshot(), contentType: 'image/png' })
   }
-  expect(result, `${testId} reachable without scrolling (${label})`).toEqual({ inView: true, hit: true })
+  expect(result, `${testId} reachable without scrolling (${label})`).toEqual({ connected: true, inView: true, hit: true })
 }
 
 async function startSeeded(page: Page) {
@@ -101,12 +119,14 @@ test('every exercise: load and reps/time fields reachable without scrolling whil
   await page.getByTestId('save-set').click()
   await expect(page.getByTestId('rest-timer')).toBeVisible()
   for (let i = 0; i < 6; i++) {
-    await page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) }).click()
-    await expect(page.getByTestId('set-label')).toBeVisible()
+    await openExercise(page, i)
+    let checked = 0
     for (const id of ['input-weight', 'input-reps', 'input-reps-left', 'input-reps-right', 'input-duration']) {
       if ((await page.getByTestId(id).count()) === 0) continue
       await expectReachable(page, id, `exercise ${i + 1}`)
+      checked++
     }
+    expect(checked, `exercise ${i + 1} has at least one load/reps/time field`).toBeGreaterThan(0)
     await expectReachable(page, 'save-set', `exercise ${i + 1}`)
   }
 })
@@ -175,7 +195,7 @@ test('open keyboard: focused fields stay visible above the action bar', async ({
     await page.getByTestId(id).focus()
     await page.waitForTimeout(450)
     const r = await reachable(page, id)
-    expect(r, `${id} visible with keyboard open`).toEqual({ inView: true, hit: true })
+    expect(r, `${id} visible with keyboard open`).toEqual({ connected: true, inView: true, hit: true })
   }
   await expectReachable(page, 'save-set', 'keyboard open')
 })
@@ -202,8 +222,7 @@ test('very long exercise names do not push the form off-screen or overflow', asy
   }, id)
   await page.reload()
   for (const i of [0, 1]) {
-    await page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) }).click()
-    await expect(page.getByTestId('set-label')).toBeVisible()
+    await openExercise(page, i)
     await expectNoHorizontalOverflow(page, `long name ${i + 1}`)
     for (const t of ['input-weight', 'save-set']) await expectReachable(page, t, `long name ${i + 1}`)
     const h = await page.getByTestId('exercise-name').evaluate((el) => el.getBoundingClientRect().height)
