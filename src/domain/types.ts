@@ -74,7 +74,12 @@ export interface SessionExercise extends PlanExercise {
   plannedSets: number
 }
 
-export type SessionStatus = 'in_progress' | 'completed'
+/**
+ * in_progress — started (also when left/paused; resumable)
+ * completed   — finished with at least one performed working set; counts toward the plan
+ * cancelled   — finished without any performed working set; kept in history, never counted
+ */
+export type SessionStatus = 'in_progress' | 'completed' | 'cancelled'
 
 export interface RestTimer {
   exerciseId: ExerciseId

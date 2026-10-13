@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 // The Pages config overrides this to rebuild its own output directory.
 const BUILD = process.env.E2E_BUILD_CMD ?? 'npx vite build'

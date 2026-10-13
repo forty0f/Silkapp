@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { trackConsole } from './helpers'
 
 test('full workout: log, rest timer, reload/resume, edit, skip, warm-up, extra set, finish', async ({ page }) => {

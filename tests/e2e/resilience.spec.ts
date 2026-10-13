@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { exportViaUi, importSeed, trackConsole } from './helpers'
 
 test('closing the app mid-workout keeps logged sets, the rest timer and the unsaved form (incl. decimal comma)', async ({ context, page }) => {

@@ -72,9 +72,19 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Prom
   if (patch.weightStepKg !== undefined) await reconcileAll()
 }
 
+/**
+ * Sessions that count as trainings: completed with ≥ 1 performed working set.
+ * Also guards legacy data where an empty session was stored as completed.
+ * These drive the completed count, the A/B rotation and the adaptation week.
+ */
 export async function completedSessions(programId: string): Promise<Session[]> {
   const list = await db.sessions.where('[programId+status]').equals([programId, 'completed']).toArray()
-  return list.sort((a, b) => a.sessionNumber - b.sessionNumber || a.startedAt.localeCompare(b.startedAt))
+  const counted: Session[] = []
+  for (const s of list) {
+    const hasWork = await db.sets.where('sessionId').equals(s.id).filter((x) => x.type === 'working' && x.status === 'done').count()
+    if (hasWork > 0) counted.push(s)
+  }
+  return counted.sort((a, b) => a.sessionNumber - b.sessionNumber || a.startedAt.localeCompare(b.startedAt))
 }
 
 export async function getInProgressSession(): Promise<Session | undefined> {
@@ -110,7 +120,7 @@ export async function getNextSessionInfo(): Promise<NextSessionInfo | null> {
 
 /** Starts a session (or returns the unfinished one, never creating two). */
 export async function startSession(override?: WorkoutType): Promise<Session> {
-  return withDbRetry(() => db.transaction('rw', db.sessions, db.programs, db.plans, async () => {
+  return withDbRetry(() => db.transaction('rw', [db.sessions, db.programs, db.plans, db.sets], async () => {
     const existing = await getInProgressSession()
     if (existing) return existing
     const info = await getNextSessionInfo()
@@ -208,10 +218,14 @@ export async function deleteSet(id: string): Promise<SuggestionChange[]> {
         .filter((s) => s.type === set.type)
         .sort((a, b) => a.setNumber - b.setNumber)
       const now = nowIso()
-      for (let i = 0; i < rest.length; i++) {
-        if (rest[i].setNumber !== i + 1) await db.sets.update(rest[i].id, { setNumber: i + 1, updatedAt: now })
-      }
       const session = await db.sessions.get(set.sessionId)
+      const planned = session?.exercises.find((e) => e.exerciseId === set.exerciseId)?.plannedSets
+      for (let i = 0; i < rest.length; i++) {
+        const setNumber = i + 1
+        // Renumbering can move an extra set into a planned slot (and vice versa).
+        const isExtra = set.type === 'working' && planned != null ? setNumber > planned : rest[i].isExtra
+        if (rest[i].setNumber !== setNumber || rest[i].isExtra !== isExtra) await db.sets.update(rest[i].id, { setNumber, isExtra, updatedAt: now })
+      }
       await db.sessions.update(set.sessionId, { updatedAt: now })
       return session?.status === 'completed' ? reconcileExercise(set.exerciseId) : []
     }),
@@ -259,7 +273,11 @@ export async function finishSession(id: string): Promise<Suggestion[]> {
       const session = await db.sessions.get(id)
       if (!session) throw new Error('Sesja nie istnieje.')
       const now = nowIso()
-      await db.sessions.update(id, { status: 'completed', finishedAt: session.finishedAt ?? now, restTimer: null, updatedAt: now })
+      // Without a single performed working set the session is cancelled: kept in
+      // history, but it does not count and does not move the A/B rotation or week.
+      const performed = await db.sets.where('sessionId').equals(id).filter((x) => x.type === 'working' && x.status === 'done').count()
+      const status = performed > 0 ? 'completed' : 'cancelled'
+      await db.sessions.update(id, { status, finishedAt: session.finishedAt ?? now, restTimer: null, updatedAt: now })
       for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)
       return db.suggestions.where('sourceSessionId').equals(id).filter((s) => s.status === 'pending').toArray()
     }),

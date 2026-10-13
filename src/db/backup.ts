@@ -50,7 +50,7 @@ const session = z.object({
   slot: z.number().int().min(1),
   phase: z.enum(['adaptation', 'continuation']),
   targetRir: rir,
-  status: z.enum(['in_progress', 'completed']),
+  status: z.enum(['in_progress', 'completed', 'cancelled']),
   startedAt: iso,
   finishedAt: iso.nullable(),
   exercises: z.array(sessionExercise),

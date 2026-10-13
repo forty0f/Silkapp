@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Check, MessageSquare, Pause, Play, X } from 'lucide-react'
 import type { SessionExercise } from '../../domain/types'
 import { Stepper, cx } from '../../components/ui'
@@ -10,11 +10,11 @@ const RIR_OPTIONS = [0, 1, 2, 3, 4, 5]
 export function RirPicker({ value, onChange, target }: { value: number | null; onChange: (v: number | null) => void; target?: { min: number; max: number } }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-baseline justify-between text-xs font-medium text-muted">
+      <div className="mb-1 flex items-baseline justify-between text-xs font-medium text-muted">
         <span>RIR — powtórzenia w zapasie</span>
         {target && <span className="text-faint">cel {target.min === target.max ? target.min : `${target.min}–${target.max}`}</span>}
       </div>
-      <div className="grid grid-cols-6 gap-1" role="radiogroup" aria-label="RIR">
+      <div className="grid grid-cols-6 gap-[3px]" role="radiogroup" aria-label="RIR">
         {RIR_OPTIONS.map((r) => {
           const on = value === r
           const inTarget = target && r >= target.min && r <= target.max
@@ -68,7 +68,9 @@ export function SetFields({
   onChange,
   weightStep,
   targetRir,
+  extraAction,
 }: {
+  extraAction?: ReactNode
   ex: SessionExercise
   draft: SetDraft
   onChange: (d: SetDraft) => void
@@ -80,10 +82,10 @@ export function SetFields({
   const repStep = 1
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {ex.loaded && (
-        <div className={cx('grid gap-3', ex.perSide ? 'grid-cols-1' : 'grid-cols-2')}>
-          <Stepper label="Ciężar (1 hantel)" unit="kg" decimals value={draft.weightKg} onChange={(v) => set('weightKg', v)} step={weightStep} max={300} testId="input-weight" />
+        <div className={cx('grid gap-3', ex.perSide ? 'grid-cols-1' : 'grid-cols-[1.25fr_1fr] min-[375px]:grid-cols-2')}>
+          <Stepper label="Ciężar (kg, 1 hantel)" unit="kg" decimals value={draft.weightKg} onChange={(v) => set('weightKg', v)} step={weightStep} max={300} testId="input-weight" />
           {!ex.perSide && ex.unit === 'reps' && <Stepper label="Powtórzenia" value={draft.reps} onChange={(v) => set('reps', v)} step={repStep} max={200} testId="input-reps" />}
         </div>
       )}
@@ -124,6 +126,7 @@ export function SetFields({
         >
           <MessageSquare size={16} /> Uwagi
         </button>
+        {extraAction}
       </div>
       {noteOpen && (
         <textarea

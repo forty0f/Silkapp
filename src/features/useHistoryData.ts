@@ -1,9 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
+import { isCountedSession } from '../domain/metrics'
 import type { Session, SetEntry } from '../domain/types'
 
 export interface HistoryData {
   sessions: Session[]
+  /** Counted trainings only: completed with ≥ 1 performed working set (newest first). */
   completed: Session[]
   setsBySession: Map<string, SetEntry[]>
 }
@@ -19,6 +21,6 @@ export function useHistoryData(): HistoryData | undefined {
       if (list) list.push(s)
       else setsBySession.set(s.sessionId, [s])
     }
-    return { sessions, completed: sessions.filter((s) => s.status === 'completed'), setsBySession }
+    return { sessions, completed: sessions.filter((s) => isCountedSession(s, setsBySession.get(s.id) ?? [])), setsBySession }
   })
 }

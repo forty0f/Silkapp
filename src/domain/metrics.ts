@@ -1,5 +1,46 @@
+import { EXERCISES } from './exercises'
 import { doneWorkingSets, setTotalReps, setValue } from './progression'
 import type { ExerciseId, Session, SessionExercise, SetEntry } from './types'
+
+/**
+ * External-load volume of one set: dumbbell mass × dumbbells used × reps
+ * (both sides summed for unilateral work). Timed/bodyweight sets give 0.
+ * It is a load-tracking index, not a strength measure, and it excludes body
+ * mass (e.g. lunges, hip thrust) — callers must label it accordingly.
+ */
+export function setLoadVolume(set: SetEntry, ex: Pick<SessionExercise, 'exerciseId' | 'unit' | 'perSide'>): number {
+  const dumbbells = EXERCISES[ex.exerciseId]?.dumbbells ?? 1
+  if (ex.unit === 'seconds' || dumbbells === 0 || set.weightKg == null) return 0
+  return set.weightKg * dumbbells * setTotalReps(set, ex)
+}
+
+/** A finished session counts as a training only with ≥ 1 performed working set. */
+export function isCountedSession(session: Session, sets: SetEntry[]): boolean {
+  return session.status === 'completed' && !session.deletedAt && sets.some((s) => s.sessionId === session.id && s.type === 'working' && s.status === 'done')
+}
+
+/** Gaps longer than this between activity events are treated as a pause, not training time. */
+export const PAUSE_GAP_MS = 30 * 60 * 1000
+
+/**
+ * Active duration: sum of gaps between consecutive activity events (start, each
+ * logged set, finish) that are ≤ 30 min. Excludes long pauses, e.g. a session
+ * reopened the next day. Derived on read, so historical sessions are covered
+ * without modifying stored data.
+ */
+export function activeDurationMs(session: Session, sets: SetEntry[]): number | null {
+  if (!session.finishedAt) return null
+  const events = [session.startedAt, ...sets.filter((s) => s.sessionId === session.id).map((s) => s.createdAt), session.finishedAt]
+    .map((t) => new Date(t).getTime())
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b)
+  let total = 0
+  for (let i = 1; i < events.length; i++) {
+    const gap = events[i] - events[i - 1]
+    if (gap <= PAUSE_GAP_MS) total += gap
+  }
+  return total
+}
 
 export interface ExerciseSessionPoint {
   sessionId: string
@@ -13,7 +54,7 @@ export interface ExerciseSessionPoint {
   /** Sum of counted reps (or seconds) over working sets. */
   totalValue: number
   workingSets: number
-  /** Tonnage: Σ load × reps (both sides for unilateral). Not a strength metric. */
+  /** External-load volume: Σ dumbbell mass × dumbbells × reps. Not a strength metric. */
   volumeKg: number
 }
 
@@ -31,7 +72,7 @@ export function exercisePoint(session: Session, ex: SessionExercise, sets: SetEn
     bestValue: Math.max(...values),
     totalValue: values.reduce((a, b) => a + b, 0),
     workingSets: working.length,
-    volumeKg: working.reduce((acc, s) => acc + (s.weightKg ?? 0) * setTotalReps(s, ex), 0),
+    volumeKg: working.reduce((acc, s) => acc + setLoadVolume(s, ex), 0),
   }
 }
 
@@ -42,7 +83,7 @@ export function exerciseHistory(
 ): ExerciseSessionPoint[] {
   const points: ExerciseSessionPoint[] = []
   for (const s of [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
-    if (s.status !== 'completed' || s.deletedAt) continue
+    if (!isCountedSession(s, setsBySession.get(s.id) ?? [])) continue
     const ex = s.exercises.find((e) => e.exerciseId === exerciseId)
     if (!ex) continue
     const p = exercisePoint(s, ex, setsBySession.get(s.id) ?? [])
@@ -59,9 +100,8 @@ export function sessionVolume(session: Session, sets: SetEntry[]): { workingSets
     const w = doneWorkingSets(sets.filter((s) => s.exerciseId === ex.exerciseId))
     workingSets += w.length
     for (const s of w) {
-      const r = setTotalReps(s, ex)
-      reps += r
-      volumeKg += (s.weightKg ?? 0) * r
+      reps += setTotalReps(s, ex)
+      volumeKg += setLoadVolume(s, ex)
     }
   }
   return { workingSets, volumeKg, reps }
@@ -90,7 +130,7 @@ export interface WeeklySummary {
 export function weeklySummaries(sessions: Session[], setsBySession: Map<string, SetEntry[]>): WeeklySummary[] {
   const map = new Map<string, WeeklySummary>()
   for (const s of sessions) {
-    if (s.status !== 'completed' || s.deletedAt) continue
+    if (!isCountedSession(s, setsBySession.get(s.id) ?? [])) continue
     const key = toDateKey(weekStart(new Date(s.startedAt)))
     const entry = map.get(key) ?? { weekKey: key, sessions: [], workingSets: 0, volumeKg: 0, reps: 0 }
     const v = sessionVolume(s, setsBySession.get(s.id) ?? [])
