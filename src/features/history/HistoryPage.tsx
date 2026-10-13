@@ -18,6 +18,7 @@ function Calendar({ sessions }: { sessions: Session[] }) {
   const byDay = useMemo(() => {
     const m = new Map<string, Session[]>()
     for (const s of sessions) {
+      if (s.status === 'cancelled') continue
       const k = toDateKey(new Date(s.startedAt))
       m.set(k, [...(m.get(k) ?? []), s])
     }

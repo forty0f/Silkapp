@@ -1,5 +1,6 @@
 import { createDefaultPlan } from '../domain/plan'
 import { evaluatePerformance, type ExercisePerformance } from '../domain/progression'
+import { advancesPlan } from '../domain/sessionState'
 import { buildSessionExercises, nextWorkoutType, positionFor, targetRirFor } from '../domain/schedule'
 import type {
   BodyMetric,
@@ -73,18 +74,14 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Prom
 }
 
 /**
- * Sessions that count as trainings: completed with ≥ 1 performed working set.
- * Also guards legacy data where an empty session was stored as completed.
- * These drive the completed count, the A/B rotation and the adaptation week.
+ * Sessions that move the plan (A/B rotation, week, slot) — see advancesPlan().
+ * This is schedule progress, not performed work: a legacy empty session keeps
+ * its historical plan effect, a repeated partial workout does not advance.
+ * Performed work (statistics) is isPerformedSession() in domain/metrics.
  */
-export async function completedSessions(programId: string): Promise<Session[]> {
-  const list = await db.sessions.where('[programId+status]').equals([programId, 'completed']).toArray()
-  const counted: Session[] = []
-  for (const s of list) {
-    const hasWork = await db.sets.where('sessionId').equals(s.id).filter((x) => x.type === 'working' && x.status === 'done').count()
-    if (hasWork > 0) counted.push(s)
-  }
-  return counted.sort((a, b) => a.sessionNumber - b.sessionNumber || a.startedAt.localeCompare(b.startedAt))
+export async function planSessions(programId: string): Promise<Session[]> {
+  const list = (await db.sessions.where('[programId+status]').equals([programId, 'completed']).toArray()).filter(advancesPlan)
+  return list.sort((a, b) => a.sessionNumber - b.sessionNumber || a.startedAt.localeCompare(b.startedAt))
 }
 
 export async function getInProgressSession(): Promise<Session | undefined> {
@@ -106,7 +103,7 @@ export async function getNextSessionInfo(): Promise<NextSessionInfo | null> {
   if (!program) return null
   const plan = await db.plans.get(program.planId)
   if (!plan) return null
-  const done = await completedSessions(program.id)
+  const done = await planSessions(program.id)
   const last = done.at(-1) ?? null
   return {
     program,
@@ -365,7 +362,8 @@ export async function reopenSession(id: string): Promise<void> {
       if (other && other.id !== id) throw new Error('Najpierw zakończ lub odrzuć trwający trening.')
       const session = await db.sessions.get(id)
       if (!session) throw new Error('Sesja nie istnieje.')
-      await db.sessions.update(id, { status: 'in_progress', finishedAt: null, updatedAt: nowIso() })
+      // planAdvance belongs to a finished session only; it is chosen again on finishing.
+      await db.sessions.update(id, { status: 'in_progress', finishedAt: null, planAdvance: undefined, updatedAt: nowIso() })
       // Suggestions derived from this session no longer stand while it is being edited;
       // the previous completed performance becomes the basis again until it is finished.
       for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)

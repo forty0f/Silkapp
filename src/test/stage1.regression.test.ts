@@ -96,11 +96,13 @@ describe('D4 empty / partial workouts', () => {
     expect(next.slot).toBe(2)
   })
 
-  it('a legacy "completed" session with no sets (from older versions) is not counted', async () => {
+  it('a legacy "completed" session with no sets keeps its plan effect but is not performed work', async () => {
     const s = await startSession()
     await db.sessions.update(s.id, { status: 'completed', finishedAt: new Date().toISOString() })
-    expect((await getNextSessionInfo())!.completedCount).toBe(0)
-    expect(isCountedSession((await db.sessions.get(s.id))!, [])).toBe(false)
+    const info = (await getNextSessionInfo())!
+    expect(info.completedCount).toBe(1) // schedule progress unchanged by the update
+    expect(info.type).toBe('B')
+    expect(isCountedSession((await db.sessions.get(s.id))!, [])).toBe(false) // not shown as performed
   })
 
   it('reopening a cancelled workout and adding a set makes it count', async () => {
