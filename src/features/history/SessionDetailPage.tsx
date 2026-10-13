@@ -4,7 +4,8 @@ import { Plus, RotateCcw, StickyNote, Trash2 } from 'lucide-react'
 import { db } from '../../db/db'
 import { deleteSession, getSettings, reopenSession, saveSet } from '../../db/repo'
 import { formatRange, formatRir } from '../../domain/plan'
-import { activeDurationMs, isCountedSession, sessionVolume } from '../../domain/metrics'
+import { activeDurationMs, sessionVolume } from '../../domain/metrics'
+import { PlanChoiceRow, sessionLabel } from '../sessionStatus'
 import type { SessionExercise, SetEntry } from '../../domain/types'
 import { fmtDay, fmtDuration, fmtTime, fmtVolume } from '../../lib/format'
 import { navigate } from '../../lib/router'
@@ -35,7 +36,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
 
   const v = sessionVolume(session, sets)
   const dur = activeDurationMs(session, sets)
-  const status = session.status === 'in_progress' ? { tone: 'amber' as const, text: 'w toku' } : isCountedSession(session, sets) ? { tone: 'green' as const, text: 'ukończony' } : { tone: 'neutral' as const, text: 'anulowany — nie zaliczony' }
+  const status = sessionLabel(session, sets)
 
   const remove = async () => {
     if (!(await confirm({ title: 'Usunąć trening z historii?', body: `${fmtDay(session.startedAt)} · trening ${session.workoutType} · ${sets.length} serii. Tej operacji nie można cofnąć (chyba że masz kopię zapasową).`, confirmLabel: 'Usuń trening', danger: true }))) return
@@ -86,7 +87,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         back="/history"
       />
       <div className="flex flex-wrap gap-1.5">
-        <Pill tone={status.tone}>{status.text}</Pill>
+        <Pill tone={status.tone} data-testid="session-label">
+          {status.text}
+        </Pill>
         <Pill>RIR {formatRir(session.targetRir)}</Pill>
         <Pill>{session.phase === 'adaptation' ? 'adaptacja' : 'kontynuacja'}</Pill>
         <Pill>plan v{session.planVersion}</Pill>
@@ -95,6 +98,14 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
           {v.workingSets} serii{v.volumeKg > 0 ? ` · ${fmtVolume(v.volumeKg)} (ciężar × powt.)` : ''}
         </Pill>
       </div>
+      {status.kind === 'partial' && (
+        <div className="mt-3">
+          <PlanChoiceRow session={session} />
+        </div>
+      )}
+      {status.kind === 'empty' && (
+        <p className="mt-3 text-sm text-muted">Zapisany jako ukończony przez wcześniejszą wersję aplikacji, bez wykonanych serii. Zachowuje swoje miejsce w planie, ale nie jest liczony jako wykonany trening.</p>
+      )}
       {session.note && (
         <Card className="mt-3 flex gap-2 p-3 text-sm">
           <StickyNote size={16} className="mt-0.5 shrink-0 text-faint" />

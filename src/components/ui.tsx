@@ -56,7 +56,7 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
   )
 }
 
-export function Pill({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red'; className?: string }) {
+export function Pill({ children, tone = 'neutral', className, ...rest }: { children: ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red'; className?: string } & React.HTMLAttributes<HTMLSpanElement>) {
   const tones = {
     neutral: 'bg-surface-3 text-muted',
     blue: 'bg-accent/15 text-accent',
@@ -64,7 +64,11 @@ export function Pill({ children, tone = 'neutral', className }: { children: Reac
     amber: 'bg-warn/15 text-warn',
     red: 'bg-danger/15 text-danger',
   }
-  return <span className={cx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium', tones[tone], className)}>{children}</span>
+  return (
+    <span className={cx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium', tones[tone], className)} {...rest}>
+      {children}
+    </span>
+  )
 }
 
 export function WorkoutBadge({ type, size = 'md' }: { type: 'A' | 'B'; size?: 'sm' | 'md' | 'lg' }) {

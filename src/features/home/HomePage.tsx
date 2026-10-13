@@ -35,6 +35,9 @@ export function HomePage() {
   const lastDone = history.completed[0] ?? null
   const adaptationTotal = info.plan.adaptationWeeks * 3
   const adaptationDone = Math.min(info.completedCount, adaptationTotal)
+  // The newest finished session was partial and the user chose to repeat it.
+  const lastFinished = history.sessions.find((s) => s.status !== 'in_progress') ?? null
+  const repeating = lastFinished?.status === 'completed' && lastFinished.planAdvance === false && lastFinished.workoutType === info.type
 
   const start = async () => {
     setStarting(true)
@@ -122,6 +125,11 @@ export function HomePage() {
               <div className="text-sm text-muted" data-testid="next-position">
                 Tydzień {position.week} · sesja {position.slot}/3 · {phaseText}
               </div>
+              {repeating && !override && (
+                <div className="text-xs text-accent" data-testid="repeat-note">
+                  Powtórzenie — poprzedni trening {type} był częściowy
+                </div>
+              )}
             </div>
             <div className="text-right">
               <div className="text-[11px] uppercase tracking-wider text-faint">cel RIR</div>
@@ -160,7 +168,7 @@ export function HomePage() {
           <div className="mb-1.5 flex items-center justify-between text-xs text-muted">
             <span>Okres adaptacyjny ({info.plan.adaptationWeeks} tyg.)</span>
             <span className="tnum">
-              {adaptationDone}/{adaptationTotal} sesji
+              {adaptationDone}/{adaptationTotal} sesji planu
             </span>
           </div>
           <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${info.plan.adaptationWeeks}, minmax(0, 1fr))` }} aria-hidden="true">
@@ -198,7 +206,7 @@ export function HomePage() {
             <span className="tnum font-bold text-ink" data-testid="completed-count">
               {totalCompleted}
             </span>{' '}
-            zaliczonych
+            wykonanych
           </div>
         </div>
         {!trends ? (

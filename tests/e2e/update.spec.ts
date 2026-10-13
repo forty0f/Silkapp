@@ -27,7 +27,7 @@ test('PWA update: new version is offered, applied, and all data survives', async
   await page.getByTestId('save-set').click()
   await page.getByTestId('workout-menu').click()
   await page.getByTestId('menu-finish').click()
-  await page.getByTestId('confirm-ok').click()
+  await page.getByTestId('finish-advance').click() // partial workout → explicit plan choice
   await page.getByTestId('summary-home').click()
   await page.getByTestId('start-workout').click()
   await page.getByTestId('input-weight').fill('12')

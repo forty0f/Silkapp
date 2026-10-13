@@ -1,6 +1,7 @@
 import { createDefaultPlan } from '../domain/plan'
 import { evaluatePerformance, type ExercisePerformance } from '../domain/progression'
 import { advancesPlan } from '../domain/sessionState'
+import { isExerciseComplete, sessionOutcome } from '../domain/metrics'
 import { buildSessionExercises, nextWorkoutType, positionFor, targetRirFor } from '../domain/schedule'
 import type {
   BodyMetric,
@@ -260,25 +261,82 @@ export function performanceFor(session: Session, exerciseId: ExerciseId, sets: S
   }
 }
 
+export type PlanChoice = 'advance' | 'repeat'
+
+export class PlanChoiceRequiredError extends Error {
+  constructor() {
+    super('Trening jest częściowo ukończony — wybierz: dalej według planu albo powtórz trening.')
+  }
+}
+
 /**
- * Completes the session and reconciles load suggestions. Suggestions are never
- * applied automatically — the user accepts or rejects each one.
+ * Finishes the session and reconciles load suggestions (never applied automatically).
+ * The outcome comes from the logged sets (see sessionOutcome):
+ * - cancelled (no performed working set) → status 'cancelled', never moves the plan;
+ * - full → 'completed', moves the plan;
+ * - partial → 'completed' and the user's explicit `choice` is required:
+ *   'advance' moves the plan, 'repeat' keeps the same workout/week/slot next time.
  */
-export async function finishSession(id: string): Promise<Suggestion[]> {
+export async function finishSession(id: string, choice?: PlanChoice): Promise<Suggestion[]> {
   return withDbRetry(() =>
     db.transaction('rw', [db.sessions, db.sets, db.suggestions, db.settings], async () => {
       const session = await db.sessions.get(id)
       if (!session) throw new Error('Sesja nie istnieje.')
+      if (session.status !== 'in_progress') return db.suggestions.where('sourceSessionId').equals(id).filter((s) => s.status === 'pending').toArray()
       const now = nowIso()
-      // Without a single performed working set the session is cancelled: kept in
-      // history, but it does not count and does not move the A/B rotation or week.
-      const performed = await db.sets.where('sessionId').equals(id).filter((x) => x.type === 'working' && x.status === 'done').count()
-      const status = performed > 0 ? 'completed' : 'cancelled'
-      await db.sessions.update(id, { status, finishedAt: session.finishedAt ?? now, restTimer: null, updatedAt: now })
+      const outcome = sessionOutcome(session, await db.sets.where('sessionId').equals(id).toArray())
+      if (outcome === 'partial' && !choice) throw new PlanChoiceRequiredError()
+      await db.sessions.update(id, {
+        status: outcome === 'cancelled' ? 'cancelled' : 'completed',
+        // Recorded only for a partial session; full ones advance by default (and stay backup format 1).
+        planAdvance: outcome === 'partial' ? choice === 'advance' : undefined,
+        finishedAt: now,
+        restTimer: null,
+        updatedAt: now,
+      })
       for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)
       return db.suggestions.where('sourceSessionId').equals(id).filter((s) => s.status === 'pending').toArray()
     }),
   )
+}
+
+/**
+ * Changes the plan choice of a partially completed session. Allowed only for the
+ * newest session while nothing is in progress, so later sessions never change position.
+ */
+export async function setPlanChoice(id: string, choice: PlanChoice): Promise<void> {
+  await withDbRetry(() =>
+    db.transaction('rw', [db.sessions, db.sets], async () => {
+      const session = await db.sessions.get(id)
+      if (!session || session.status !== 'completed') throw new Error('Sesja nie jest ukończona.')
+      if (!(await canChangePlanChoice(session))) throw new Error('Wybór można zmienić tylko dla ostatniego treningu.')
+      await db.sessions.update(id, { planAdvance: choice === 'advance', updatedAt: nowIso() })
+    }),
+  )
+}
+
+export async function canChangePlanChoice(session: Session): Promise<boolean> {
+  if (session.status !== 'completed') return false
+  if (sessionOutcome(session, await db.sets.where('sessionId').equals(session.id).toArray()) !== 'partial') return false
+  const all = await db.sessions.toArray()
+  return !all.some((s) => s.id !== session.id && !s.deletedAt && (s.status === 'in_progress' || s.startedAt > session.startedAt))
+}
+
+/**
+ * Latest finished performance in which ALL planned working sets of the exercise were
+ * performed. Only such a performance can create, keep or withdraw a load suggestion:
+ * a partially done exercise (e.g. one set "to try") never cancels an earlier proposal.
+ */
+export async function lastCompletePerformance(exerciseId: ExerciseId): Promise<ExercisePerformance | null> {
+  const sessions = (await db.sessions.where('status').equals('completed').toArray())
+    .filter((s) => !s.deletedAt && s.exercises.some((e) => e.exerciseId === exerciseId))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  for (const s of sessions) {
+    const sets = await db.sets.where('[sessionId+exerciseId]').equals([s.id, exerciseId]).toArray()
+    const ex = s.exercises.find((e) => e.exerciseId === exerciseId)!
+    if (ex.plannedSets > 0 && isExerciseComplete(ex, sets)) return { sessionId: s.id, date: s.finishedAt ?? s.startedAt, exercise: ex, targetRir: s.targetRir, sets }
+  }
+  return null
 }
 
 export type SuggestionChange = { exerciseId: ExerciseId; kind: 'created' | 'updated' | 'withdrawn'; suggestion: Suggestion }
@@ -296,7 +354,7 @@ export type SuggestionChange = { exerciseId: ExerciseId; kind: 'created' | 'upda
  */
 export async function reconcileExercise(exerciseId: ExerciseId): Promise<SuggestionChange[]> {
   const changes: SuggestionChange[] = []
-  const latest = await lastPerformance(exerciseId)
+  const latest = await lastCompletePerformance(exerciseId)
   const all = await db.suggestions.where('exerciseId').equals(exerciseId).toArray()
   const completedIds = new Set((await db.sessions.where('status').equals('completed').primaryKeys()) as string[])
   for (const s of all) {

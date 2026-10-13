@@ -7,6 +7,7 @@ import { navigate } from '../../lib/router'
 import { PageHeader } from '../../components/PageHeader'
 import { Card, EmptyState, Pill, SectionTitle, WorkoutBadge, cx } from '../../components/ui'
 import { useHistoryData } from '../useHistoryData'
+import { sessionLabel } from '../sessionStatus'
 
 const WEEKDAYS = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
 
@@ -102,7 +103,7 @@ export function HistoryPage() {
   const counted = new Set(data.completed.map((s) => s.id))
   return (
     <div className="pb-4">
-      <PageHeader title="Historia" subtitle={`${data.completed.length} ukończonych treningów`} />
+      <PageHeader title="Historia" subtitle={`${data.completed.length} wykonanych treningów`} />
       {/* Calendar shows counted trainings and the one in progress; cancelled/empty ones stay in the list only. */}
       <Calendar sessions={data.sessions.filter((s) => s.status === 'in_progress' || counted.has(s.id))} />
       <SectionTitle>Wszystkie sesje</SectionTitle>
@@ -116,7 +117,8 @@ export function HistoryPage() {
             const sets = data.setsBySession.get(s.id) ?? []
             const v = sessionVolume(s, sets)
             const dur = activeDurationMs(s, sets)
-            const notCounted = s.status !== 'in_progress' && !counted.has(s.id)
+            const label = sessionLabel(s, sets)
+            const notCounted = label.muted
             return (
               <li key={s.id}>
                 <button
@@ -128,8 +130,11 @@ export function HistoryPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{fmtDay(s.startedAt)}</span>
-                      {s.status === 'in_progress' && <Pill tone="amber">w toku</Pill>}
-                      {notCounted && <Pill>anulowany</Pill>}
+                      {label.kind !== 'full' && (
+                        <Pill tone={label.tone} data-testid="session-label">
+                          {label.text}
+                        </Pill>
+                      )}
                     </div>
                     <div className="tnum truncate text-sm text-muted">
                       T{s.week}/{s.slot} · {v.workingSets} serii{v.volumeKg > 0 ? ` · ${fmtVolume(v.volumeKg)}` : ''}{dur != null ? ` · ${fmtDuration(dur)}` : ` · od ${fmtTime(s.startedAt)}`}

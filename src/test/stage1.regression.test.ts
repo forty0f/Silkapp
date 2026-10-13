@@ -14,7 +14,7 @@ import {
   startSession,
   type SetInput,
 } from '../db/repo'
-import { activeDurationMs, exerciseHistory, exercisePoint, isCountedSession, PAUSE_GAP_MS, sessionVolume, setLoadVolume, weeklySummaries } from '../domain/metrics'
+import { activeDurationMs, exerciseHistory, exercisePoint, isPerformedSession, PAUSE_GAP_MS, sessionVolume, setLoadVolume, weeklySummaries } from '../domain/metrics'
 import { comparePerformances, evaluatePerformance } from '../domain/progression'
 import { hasMaxDecimals, validateDraft } from '../features/workout/setDraft'
 import { perf, set } from './factories'
@@ -51,14 +51,14 @@ async function completeSessions(n: number) {
   for (let k = 0; k < n; k++) {
     const s = await startSession()
     await saveSet(base(s, 0))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
   }
 }
 
 describe('D4 empty / partial workouts', () => {
   it('a workout finished without any performed working set is cancelled and does not count', async () => {
     const s = await startSession()
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     expect((await db.sessions.get(s.id))!.status).toBe('cancelled')
     const info = (await getNextSessionInfo())!
     expect(info.completedCount).toBe(0)
@@ -70,15 +70,15 @@ describe('D4 empty / partial workouts', () => {
     const s = await startSession()
     await saveSet(base(s, 0, { type: 'warmup', rir: null }))
     await saveSet(base(s, 1, { status: 'skipped' }))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     expect((await db.sessions.get(s.id))!.status).toBe('cancelled')
     expect((await getNextSessionInfo())!.completedCount).toBe(0)
   })
 
-  it('partial completion: ≥ 1 performed working set counts as a completed training and moves the plan', async () => {
+  it('partial completion with "advance": completed, performed work, plan moves on', async () => {
     const s = await startSession()
     await saveSet(base(s, 0))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     expect((await db.sessions.get(s.id))!.status).toBe('completed')
     const info = (await getNextSessionInfo())!
     expect(info.completedCount).toBe(1)
@@ -90,7 +90,7 @@ describe('D4 empty / partial workouts', () => {
     await completeSessions(1) // A
     const empty = await startSession() // B, abandoned
     expect(empty.workoutType).toBe('B')
-    await finishSession(empty.id)
+    await finishSession(empty.id, 'advance')
     const next = await startSession()
     expect(next.workoutType).toBe('B')
     expect(next.slot).toBe(2)
@@ -102,15 +102,15 @@ describe('D4 empty / partial workouts', () => {
     const info = (await getNextSessionInfo())!
     expect(info.completedCount).toBe(1) // schedule progress unchanged by the update
     expect(info.type).toBe('B')
-    expect(isCountedSession((await db.sessions.get(s.id))!, [])).toBe(false) // not shown as performed
+    expect(isPerformedSession((await db.sessions.get(s.id))!, [])).toBe(false) // not shown as performed
   })
 
   it('reopening a cancelled workout and adding a set makes it count', async () => {
     const s = await startSession()
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     await reopenSession(s.id)
     await saveSet(base(s, 0))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     expect((await db.sessions.get(s.id))!.status).toBe('completed')
     expect((await getNextSessionInfo())!.completedCount).toBe(1)
   })
@@ -143,7 +143,7 @@ describe('D3 extra-set flag after deleting / editing', () => {
     const ids = []
     for (let k = 0; k < 3; k++) ids.push((await saveSet(base(s, 0, { reps: 12 }))).id)
     const extra = await saveSet(base(s, 0, { reps: 12, isExtra: true }))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     const pending = () => db.suggestions.where('sourceSessionId').equals(s.id).filter((x) => x.exerciseId === s.exercises[0].exerciseId && x.status === 'pending').count()
     expect(await pending()).toBe(1)
     await deleteSet(ids[1]) // extra becomes planned #3 → still 3 at the top
@@ -157,7 +157,7 @@ describe('D3 extra-set flag after deleting / editing', () => {
     const s = await startSession()
     const sets = []
     for (let k = 0; k < 3; k++) sets.push(await saveSet(base(s, 0, { reps: 12 })))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     const { changes } = await saveSetDetailed({ ...sets[0], reps: 9 })
     expect(changes.some((c) => c.kind === 'withdrawn')).toBe(true)
   })
@@ -256,7 +256,7 @@ describe('D5 active duration', () => {
   it('stored data is not modified — derived on read', async () => {
     const s = await startSession()
     await saveSet(base(s, 0))
-    await finishSession(s.id)
+    await finishSession(s.id, 'advance')
     const before = await db.sessions.get(s.id)
     activeDurationMs(before!, await setsForSession(s.id))
     expect(await db.sessions.get(s.id)).toEqual(before)
@@ -305,7 +305,7 @@ describe('history and summaries skip sessions that do not count', () => {
   it('exerciseHistory and weeklySummaries ignore cancelled sessions', async () => {
     await completeSessions(1)
     const empty = await startSession()
-    await finishSession(empty.id)
+    await finishSession(empty.id, 'advance')
     const sessions = await db.sessions.toArray()
     const map = new Map<string, Awaited<ReturnType<typeof setsForSession>>>()
     for (const x of sessions) map.set(x.id, await setsForSession(x.id))

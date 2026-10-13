@@ -14,9 +14,42 @@ export function setLoadVolume(set: SetEntry, ex: Pick<SessionExercise, 'exercise
   return set.weightKg * dumbbells * setTotalReps(set, ex)
 }
 
-/** A finished session counts as a training only with ≥ 1 performed working set. */
-export function isCountedSession(session: Session, sets: SetEntry[]): boolean {
+/**
+ * Performed work: a finished session with ≥ 1 performed working set. Drives
+ * statistics, history counts and progress — never the plan position (see
+ * advancesPlan in sessionState.ts). Legacy empty "completed" sessions are excluded.
+ */
+export function isPerformedSession(session: Session, sets: SetEntry[]): boolean {
   return session.status === 'completed' && !session.deletedAt && sets.some((s) => s.sessionId === session.id && s.type === 'working' && s.status === 'done')
+}
+
+export type SessionOutcome = 'cancelled' | 'partial' | 'full'
+
+/** Performed planned working sets of one exercise (extra sets and skipped ones excluded). */
+export function plannedDone(ex: Pick<SessionExercise, 'exerciseId'>, sets: SetEntry[]): number {
+  return sets.filter((s) => s.exerciseId === ex.exerciseId && s.type === 'working' && s.status === 'done' && !s.isExtra).length
+}
+
+/** All planned working sets of the exercise were performed (skipped sets do not count). */
+export function isExerciseComplete(ex: Pick<SessionExercise, 'exerciseId' | 'plannedSets'>, sets: SetEntry[]): boolean {
+  return plannedDone(ex, sets) >= ex.plannedSets
+}
+
+/**
+ * Outcome from the logged sets — no percentage threshold:
+ * cancelled = no performed working set; full = every planned working set of every
+ * exercise performed; partial = anything in between.
+ */
+export function sessionOutcome(session: Pick<Session, 'id' | 'exercises'>, sets: SetEntry[]): SessionOutcome {
+  const own = sets.filter((s) => s.sessionId === session.id)
+  if (!own.some((s) => s.type === 'working' && s.status === 'done')) return 'cancelled'
+  return session.exercises.every((ex) => isExerciseComplete(ex, own)) ? 'full' : 'partial'
+}
+
+/** Planned working sets performed vs planned, for "9/16" labels. */
+export function plannedProgress(session: Pick<Session, 'id' | 'exercises'>, sets: SetEntry[]): { done: number; planned: number } {
+  const own = sets.filter((s) => s.sessionId === session.id)
+  return session.exercises.reduce((acc, ex) => ({ done: acc.done + Math.min(plannedDone(ex, own), ex.plannedSets), planned: acc.planned + ex.plannedSets }), { done: 0, planned: 0 })
 }
 
 /** Gaps longer than this between activity events are treated as a pause, not training time. */
@@ -83,7 +116,7 @@ export function exerciseHistory(
 ): ExerciseSessionPoint[] {
   const points: ExerciseSessionPoint[] = []
   for (const s of [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
-    if (!isCountedSession(s, setsBySession.get(s.id) ?? [])) continue
+    if (!isPerformedSession(s, setsBySession.get(s.id) ?? [])) continue
     const ex = s.exercises.find((e) => e.exerciseId === exerciseId)
     if (!ex) continue
     const p = exercisePoint(s, ex, setsBySession.get(s.id) ?? [])
@@ -130,7 +163,7 @@ export interface WeeklySummary {
 export function weeklySummaries(sessions: Session[], setsBySession: Map<string, SetEntry[]>): WeeklySummary[] {
   const map = new Map<string, WeeklySummary>()
   for (const s of sessions) {
-    if (!isCountedSession(s, setsBySession.get(s.id) ?? [])) continue
+    if (!isPerformedSession(s, setsBySession.get(s.id) ?? [])) continue
     const key = toDateKey(weekStart(new Date(s.startedAt)))
     const entry = map.get(key) ?? { weekKey: key, sessions: [], workingSets: 0, volumeKg: 0, reps: 0 }
     const v = sessionVolume(s, setsBySession.get(s.id) ?? [])

@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { BookOpen, Check, ChevronLeft, ChevronRight, Flag, History, LogOut, MoreHorizontal, StickyNote, Trash2, TrendingUp } from 'lucide-react'
 import { db } from '../../db/db'
-import { decideSuggestion, deleteSession, finishSession, getSettings, lastPerformance, preferredWeight, saveSet, updateSession, updateSettings } from '../../db/repo'
+import { decideSuggestion, deleteSession, finishSession, type PlanChoice, getSettings, lastPerformance, preferredWeight, saveSet, updateSession, updateSettings } from '../../db/repo'
 import type { Session, SessionExercise, SetEntry, SetType } from '../../domain/types'
 import { formatRange, formatRest, formatRir } from '../../domain/plan'
 import { fmtKg } from '../../domain/progression'
+import { plannedProgress, sessionOutcome } from '../../domain/metrics'
 import { relativeDay } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { unlockAudio } from '../../lib/feedback'
@@ -54,7 +55,7 @@ function exerciseProgress(ex: SessionExercise, sets: SetEntry[]) {
 }
 
 function ActiveWorkout({ session, sets, settings }: { session: Session; sets: SetEntry[]; settings: Awaited<ReturnType<typeof getSettings>> }) {
-  const { toast, confirm } = useFeedback()
+  const { toast, confirm, choose } = useFeedback()
   const [menuOpen, setMenuOpen] = useState(false)
   const [atlasFor, setAtlasFor] = useState<SessionExercise | null>(null)
   useWakeLock(settings.keepScreenOn)
@@ -62,8 +63,6 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
   const idx = Math.min(session.currentExerciseIndex, session.exercises.length - 1)
   const ex = session.exercises[idx]
   const progress = session.exercises.map((e) => exerciseProgress(e, sets))
-  const totalPlanned = progress.reduce((a, p) => a + p.planned, 0)
-  const totalLogged = progress.reduce((a, p) => a + p.logged, 0)
   const allDone = progress.every((p) => p.complete)
 
   const goTo = useCallback(
@@ -79,23 +78,49 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
   )
 
   const finish = async () => {
-    const missing = totalPlanned - totalLogged
-    const performed = sets.filter((s) => s.type === 'working' && s.status === 'done').length
-    const ok = await confirm(performed === 0 ? {
-      title: 'Anulować trening?',
-      body: 'Nie zapisano żadnej wykonanej serii roboczej. Trening zostanie oznaczony jako anulowany — zostanie w historii, ale nie będzie zaliczony i nie przesunie planu (tydzień ani kolejność A/B się nie zmienią).',
-      confirmLabel: 'Anuluj trening',
-    } : {
-      title: 'Zakończyć trening?',
-      body:
-        missing > 0
-          ? `Zapisano ${totalLogged} z ${totalPlanned} zaplanowanych serii roboczych. Brakujące serie nie zostaną uwzględnione w ocenie progresji.`
-          : 'Wszystkie zaplanowane serie są zapisane. Po zakończeniu zobaczysz podsumowanie i propozycje progresji.',
-      confirmLabel: 'Zakończ',
-    })
-    if (!ok) return
+    const outcome = sessionOutcome(session, sets)
+    const { done, planned } = plannedProgress(session, sets)
+    const other = session.workoutType === 'A' ? 'B' : 'A'
+    let choice: PlanChoice | undefined
+    if (outcome === 'partial') {
+      // Partial: the user decides consciously — no option is preselected.
+      const picked = await choose({
+        title: 'Trening częściowo ukończony',
+        body: (
+          <>
+            <p>
+              Wykonano {done} z {planned} zaplanowanych serii roboczych. Wykonane serie zostaną zapisane i wliczone do statystyk; ćwiczenia z kompletem serii mogą dać propozycję
+              progresji.
+            </p>
+            <p className="mt-2">Co ma być następnym treningiem?</p>
+          </>
+        ),
+        choices: [
+          { label: `Dalej według planu — następny ${other}`, value: 'advance', testId: 'finish-advance' },
+          { label: `Powtórz trening ${session.workoutType}`, value: 'repeat', testId: 'finish-repeat' },
+        ],
+        cancelLabel: 'Wróć do treningu',
+      })
+      if (!picked) return
+      choice = picked as PlanChoice
+    } else {
+      const ok = await confirm(
+        outcome === 'cancelled'
+          ? {
+              title: 'Anulować trening?',
+              body: 'Nie zapisano żadnej wykonanej serii roboczej. Trening zostanie oznaczony jako anulowany — zostanie w historii, ale nie będzie zaliczony i nie przesunie planu (tydzień ani kolejność A/B się nie zmienią).',
+              confirmLabel: 'Anuluj trening',
+            }
+          : {
+              title: 'Zakończyć trening?',
+              body: 'Wszystkie zaplanowane serie są wykonane. Po zakończeniu zobaczysz podsumowanie i propozycje progresji.',
+              confirmLabel: 'Zakończ',
+            },
+      )
+      if (!ok) return
+    }
     try {
-      await finishSession(session.id)
+      await finishSession(session.id, choice)
       clearDraft()
       setMenuOpen(false)
     } catch (e) {
