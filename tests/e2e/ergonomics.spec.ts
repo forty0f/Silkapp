@@ -15,8 +15,61 @@ async function reachable(page: Page, testId: string): Promise<{ inView: boolean;
   })
 }
 
+/** Snapshot of everything that can cover a control, printed and attached when a check fails. */
+async function diagnose(page: Page, testId: string) {
+  return page.getByTestId(testId).first().evaluate((el) => {
+    const describe = (n: Element | null) => {
+      if (!n) return null
+      const r = n.getBoundingClientRect()
+      const cs = getComputedStyle(n)
+      return {
+        tag: n.tagName.toLowerCase(),
+        testid: n.getAttribute('data-testid'),
+        aria: n.getAttribute('aria-label'),
+        cls: (n.getAttribute('class') ?? '').slice(0, 120),
+        text: (n.textContent ?? '').trim().slice(0, 60),
+        rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+        position: cs.position,
+        zIndex: cs.zIndex,
+        opacity: cs.opacity,
+      }
+    }
+    const r = el.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const cy = r.top + r.height / 2
+    const hit = document.elementFromPoint(cx, cy)
+    const chain: unknown[] = []
+    for (let n: Element | null = hit; n && chain.length < 8; n = n.parentElement) chain.push(describe(n))
+    const overlays = Array.from(document.querySelectorAll('body *'))
+      .filter((n) => ['fixed', 'sticky'].includes(getComputedStyle(n).position))
+      .map(describe)
+    return {
+      target: describe(el),
+      point: [Math.round(cx), Math.round(cy)],
+      elementFromPoint: chain,
+      stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(describe),
+      viewport: [window.innerWidth, window.innerHeight],
+      scrollY: window.scrollY,
+      timer: document.querySelector('[data-testid=rest-timer]')?.textContent ?? null,
+      exercise: document.querySelector('[data-testid=exercise-name]')?.textContent ?? null,
+      activeChip: document.querySelector('nav [aria-current=step]')?.getAttribute('aria-label') ?? null,
+      setLabel: document.querySelector('[data-testid=set-label]')?.textContent ?? null,
+      busy: !!document.querySelector('[aria-busy=true]'),
+      overlays,
+    }
+  })
+}
+
 async function expectReachable(page: Page, testId: string, label: string) {
-  expect(await reachable(page, testId), `${testId} reachable without scrolling (${label})`).toEqual({ inView: true, hit: true })
+  const result = await reachable(page, testId)
+  if (!result.inView || !result.hit) {
+    const info = await diagnose(page, testId)
+    const name = `diag-${testId}-${label.replace(/\W+/g, '_')}`
+    console.log(`[DIAG] ${test.info().project.name} ${label} ${testId}: ${JSON.stringify(info)}`)
+    await test.info().attach(`${name}.json`, { body: JSON.stringify(info, null, 2), contentType: 'application/json' })
+    await test.info().attach(`${name}.png`, { body: await page.screenshot(), contentType: 'image/png' })
+  }
+  expect(result, `${testId} reachable without scrolling (${label})`).toEqual({ inView: true, hit: true })
 }
 
 async function startSeeded(page: Page) {

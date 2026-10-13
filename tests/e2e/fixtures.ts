@@ -22,6 +22,12 @@ export const test = base.extend<{ safeArea: void }>({
           else document.addEventListener('DOMContentLoaded', add)
         }, SAFE_AREA_CSS)
       }
+      // Opt-in CPU slowdown (Chromium only) to reproduce timing-dependent failures locally.
+      const rate = Number(process.env.E2E_CPU_THROTTLE ?? 0)
+      if (rate > 1) {
+        const cdp = await page.context().newCDPSession(page)
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate })
+      }
       await use()
     },
     { auto: true },
