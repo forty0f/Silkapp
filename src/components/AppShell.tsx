@@ -21,7 +21,7 @@ function UpdatePrompt({ hidden }: { hidden: boolean }) {
   // Never interrupt an active workout; the prompt comes back on other screens.
   if (!needRefresh || hidden) return null
   return (
-    <div className="px-safe fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center">
+    <div className="px-safe fixed inset-x-0 bottom-[calc(4.75rem+var(--safe-bottom))] z-40 flex justify-center">
       <div className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-accent/30 bg-surface-2 p-3 shadow-2xl shadow-black/50">
         <p className="min-w-0 flex-1 text-sm">Dostępna nowa wersja aplikacji. Dane treningowe pozostaną bez zmian.</p>
         <Button size="sm" variant="ghost" onClick={() => setNeedRefresh(false)}>
@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-      <main className={cx('px-safe mx-auto w-full max-w-2xl', !online ? 'pt-2' : 'pt-safe', inWorkout ? 'pb-safe' : 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]')}>
+      <main className={cx('px-safe mx-auto w-full max-w-2xl', !online ? 'pt-2' : 'pt-safe', inWorkout ? 'pb-safe' : 'pb-[calc(5.5rem+var(--safe-bottom))]')}>
         {children}
       </main>
       {!inWorkout && (

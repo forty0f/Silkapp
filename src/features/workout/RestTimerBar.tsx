@@ -58,15 +58,15 @@ export function RestTimerBar({
   const progress = Math.min(1, Math.max(0, 1 - remaining / timer.durationSec))
 
   return (
-    <div className={cx('relative overflow-hidden rounded-2xl border', done ? 'border-go/40 bg-[#0d2620]' : 'border-line bg-surface-2')} data-testid="rest-timer" role="timer" aria-live="off">
+    <div className={cx('relative overflow-hidden rounded-xl border', done ? 'border-go/40 bg-[#0d2620]' : 'border-line bg-surface-2')} data-testid="rest-timer" role="timer" aria-live="off">
       <div className={cx('absolute inset-y-0 left-0', done ? 'bg-go/10' : 'bg-accent/12')} style={{ width: `${progress * 100}%` }} />
-      <div className="relative flex items-center gap-2 p-2 pl-3">
-        <Timer size={20} className={done ? 'text-go' : 'text-accent'} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-wider text-faint">{done ? 'Przerwa zakończona' : 'Przerwa'}</div>
-          <div className={cx('tnum text-2xl font-bold leading-tight', done && 'text-go')} data-testid="rest-remaining">
+      <div className="relative flex items-center gap-1.5 py-0.5 pl-3 pr-0.5">
+        <Timer size={18} className={done ? 'text-go' : 'text-accent'} aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="truncate text-xs text-faint">{done ? 'Przerwa minęła' : 'Przerwa'}</span>
+          <span className={cx('tnum text-xl font-bold leading-tight', done && 'text-go')} data-testid="rest-remaining">
             {done ? `+${fmtClock(-remaining)}` : fmtClock(remaining)}
-          </div>
+          </span>
         </div>
         {!done && (
           <>

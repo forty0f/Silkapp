@@ -78,11 +78,21 @@ export function prefillDraft(args: {
   }
 }
 
+/** True when v has at most `places` decimal places (tolerant to float noise). */
+export function hasMaxDecimals(v: number, places: number): boolean {
+  const f = 10 ** places
+  return Math.abs(Math.round(v * f) - v * f) < 1e-6
+}
+
 export function validateDraft(ex: SessionExercise, d: SetDraft): string | null {
   if (d.status === 'skipped') return null
   const positiveInt = (v: number | null, max: number) => v != null && Number.isInteger(v) && v >= 1 && v <= max
-  if (ex.loaded && d.weightKg == null) return 'Podaj ciężar (masa jednego hantla).'
-  if (d.weightKg != null && (!Number.isFinite(d.weightKg) || d.weightKg < 0 || d.weightKg > 300)) return 'Ciężar poza zakresem 0–300 kg.'
+  if (ex.loaded) {
+    // Any real dumbbell mass is allowed (no forced step), up to 0.01 kg precision.
+    if (d.weightKg == null) return 'Podaj ciężar (masa jednego hantla).'
+    if (!Number.isFinite(d.weightKg) || d.weightKg <= 0 || d.weightKg > 300) return 'Ciężar musi być większy od 0 i nie większy niż 300 kg.'
+    if (!hasMaxDecimals(d.weightKg, 2)) return 'Ciężar: maksymalnie 2 miejsca po przecinku (np. 12,25 kg).'
+  }
   if (d.rir != null && !(Number.isInteger(d.rir) && d.rir >= 0 && d.rir <= 10)) return 'RIR musi być liczbą całkowitą 0–10 albo pozostać nieoceniony.'
   if (ex.unit === 'seconds') return positiveInt(d.durationSec, 3600) ? null : 'Podaj czas w pełnych sekundach (co najmniej 1 s).'
   if (ex.perSide) {

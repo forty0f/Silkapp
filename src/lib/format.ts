@@ -53,6 +53,11 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(min / 60)} h ${min % 60} min`
 }
 
+/** External-load volume, whole kilograms (e.g. "1 080 kg"). */
+export function fmtVolume(kg: number): string {
+  return `${Math.round(kg).toLocaleString('pl-PL')} kg`
+}
+
 export function fmtNum(v: number, digits = 1): string {
   return v.toLocaleString('pl-PL', { maximumFractionDigits: digits })
 }

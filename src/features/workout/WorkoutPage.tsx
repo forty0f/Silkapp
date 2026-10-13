@@ -3,19 +3,18 @@ import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { BookOpen, Check, ChevronLeft, ChevronRight, Flag, History, LogOut, MoreHorizontal, StickyNote, Trash2, TrendingUp } from 'lucide-react'
 import { db } from '../../db/db'
-import { decideSuggestion, deleteSession, finishSession, getSettings, lastPerformance, preferredWeight, saveSet, updateSession, updateSettings } from '../../db/repo'
+import { decideSuggestion, deleteSession, finishSession, type PlanChoice, getSettings, lastPerformance, preferredWeight, saveSet, updateSession, updateSettings } from '../../db/repo'
 import type { Session, SessionExercise, SetEntry, SetType } from '../../domain/types'
 import { formatRange, formatRest, formatRir } from '../../domain/plan'
 import { fmtKg } from '../../domain/progression'
-import { fmtElapsed, relativeDay } from '../../lib/format'
+import { plannedProgress, sessionOutcome } from '../../domain/metrics'
+import { relativeDay } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { unlockAudio } from '../../lib/feedback'
-import { useNow } from '../../lib/useNow'
 import { useWakeLock } from '../../lib/useWakeLock'
 import { clearDraft, loadDraft, storeDraft } from '../../lib/draftStore'
-import { Button, Card, Pill, Sheet, Toggle, WorkoutBadge, cx } from '../../components/ui'
+import { Button, Card, Sheet, Toggle, cx } from '../../components/ui'
 import { useFeedback } from '../../components/feedback'
-import { ExerciseFigure } from '../atlas/ExerciseFigure'
 import { ExerciseSheetContent } from '../atlas/ExerciseSheetContent'
 import { RestTimerBar } from './RestTimerBar'
 import { SetEditSheet } from './SetEditSheet'
@@ -46,7 +45,6 @@ export function WorkoutPage({ sessionId }: { sessionId: string }) {
       </div>
     )
   }
-  // Anything finished (completed or cancelled) shows its summary — never the active form.
   if (session.status !== 'in_progress') return <WorkoutSummary session={session} sets={sets} />
   return <ActiveWorkout session={session} sets={sets} settings={settings} />
 }
@@ -57,17 +55,14 @@ function exerciseProgress(ex: SessionExercise, sets: SetEntry[]) {
 }
 
 function ActiveWorkout({ session, sets, settings }: { session: Session; sets: SetEntry[]; settings: Awaited<ReturnType<typeof getSettings>> }) {
-  const { toast, confirm } = useFeedback()
+  const { toast, confirm, choose } = useFeedback()
   const [menuOpen, setMenuOpen] = useState(false)
   const [atlasFor, setAtlasFor] = useState<SessionExercise | null>(null)
   useWakeLock(settings.keepScreenOn)
-  const now = useNow(true, 1000)
 
   const idx = Math.min(session.currentExerciseIndex, session.exercises.length - 1)
   const ex = session.exercises[idx]
   const progress = session.exercises.map((e) => exerciseProgress(e, sets))
-  const totalPlanned = progress.reduce((a, p) => a + p.planned, 0)
-  const totalLogged = progress.reduce((a, p) => a + p.logged, 0)
   const allDone = progress.every((p) => p.complete)
 
   const goTo = useCallback(
@@ -83,18 +78,49 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
   )
 
   const finish = async () => {
-    const missing = totalPlanned - totalLogged
-    const ok = await confirm({
-      title: 'Zakończyć trening?',
-      body:
-        missing > 0
-          ? `Zapisano ${totalLogged} z ${totalPlanned} zaplanowanych serii roboczych. Brakujące serie nie zostaną uwzględnione w ocenie progresji.`
-          : 'Wszystkie zaplanowane serie są zapisane. Po zakończeniu zobaczysz podsumowanie i propozycje progresji.',
-      confirmLabel: 'Zakończ',
-    })
-    if (!ok) return
+    const outcome = sessionOutcome(session, sets)
+    const { done, planned } = plannedProgress(session, sets)
+    const other = session.workoutType === 'A' ? 'B' : 'A'
+    let choice: PlanChoice | undefined
+    if (outcome === 'partial') {
+      // Partial: the user decides consciously — no option is preselected.
+      const picked = await choose({
+        title: 'Trening częściowo ukończony',
+        body: (
+          <>
+            <p>
+              Wykonano {done} z {planned} zaplanowanych serii roboczych. Wykonane serie zostaną zapisane i wliczone do statystyk; ćwiczenia z kompletem serii mogą dać propozycję
+              progresji.
+            </p>
+            <p className="mt-2">Co ma być następnym treningiem?</p>
+          </>
+        ),
+        choices: [
+          { label: `Dalej według planu — następny ${other}`, value: 'advance', testId: 'finish-advance' },
+          { label: `Powtórz trening ${session.workoutType}`, value: 'repeat', testId: 'finish-repeat' },
+        ],
+        cancelLabel: 'Wróć do treningu',
+      })
+      if (!picked) return
+      choice = picked as PlanChoice
+    } else {
+      const ok = await confirm(
+        outcome === 'cancelled'
+          ? {
+              title: 'Anulować trening?',
+              body: 'Nie zapisano żadnej wykonanej serii roboczej. Trening zostanie oznaczony jako anulowany — zostanie w historii, ale nie będzie zaliczony i nie przesunie planu (tydzień ani kolejność A/B się nie zmienią).',
+              confirmLabel: 'Anuluj trening',
+            }
+          : {
+              title: 'Zakończyć trening?',
+              body: 'Wszystkie zaplanowane serie są wykonane. Po zakończeniu zobaczysz podsumowanie i propozycje progresji.',
+              confirmLabel: 'Zakończ',
+            },
+      )
+      if (!ok) return
+    }
     try {
-      await finishSession(session.id)
+      await finishSession(session.id, choice)
       clearDraft()
       setMenuOpen(false)
     } catch (e) {
@@ -123,28 +149,28 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
     void updateSession(session.id, { restTimer: null }).catch(() => {})
   }, [session.id])
 
+  const prevName = idx > 0 ? session.exercises[idx - 1].name : null
+  const nextName = idx < session.exercises.length - 1 ? session.exercises[idx + 1].name : null
+
   return (
-    <div className="pb-4">
-      <header className="sticky top-0 z-20 -mx-4 border-b border-line/60 bg-bg/95 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-xl">
+    <div className="pb-2">
+      <header className="sticky top-0 z-20 -mx-4 border-b border-line/60 bg-bg/95 px-4 pb-1.5 pt-[max(0.25rem,var(--safe-top))] backdrop-blur-xl" data-testid="workout-header">
         <div className="flex items-center gap-2">
           <button type="button" aria-label="Wstrzymaj i wyjdź" onClick={() => navigate('/')} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted active:bg-surface-2">
             <ChevronLeft size={26} />
           </button>
-          <WorkoutBadge type={session.workoutType} size="sm" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-semibold leading-tight">Trening {session.workoutType}</div>
-            <div className="truncate text-xs text-muted">
-              Tydz. {session.week} · {session.slot}/3 · <span className="text-accent">RIR {formatRir(session.targetRir)}</span>
-            </div>
-          </div>
-          <div className="tnum text-right text-sm text-muted" aria-label="Czas treningu">
-            {fmtElapsed((now - new Date(session.startedAt).getTime()) / 1000)}
+          <div className="min-w-0 flex-1 truncate text-sm">
+            <span className="font-semibold">Trening {session.workoutType}</span>
+            <span className="text-muted">
+              {' '}
+              · T{session.week} · {session.slot}/3 · <span className="text-accent">RIR {formatRir(session.targetRir)}</span>
+            </span>
           </div>
           <button type="button" aria-label="Menu treningu" onClick={() => setMenuOpen(true)} className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-muted active:bg-surface-2" data-testid="workout-menu">
             <MoreHorizontal size={24} />
           </button>
         </div>
-        <nav className="mt-2 grid grid-cols-6 gap-1.5" aria-label="Ćwiczenia">
+        <nav className="mt-1 grid grid-cols-6 gap-1.5" aria-label="Ćwiczenia">
           {session.exercises.map((e, i) => {
             const p = progress[i]
             return (
@@ -171,22 +197,9 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
         </nav>
       </header>
 
-      <ExercisePanel key={ex.exerciseId} session={session} ex={ex} index={idx} sets={sets} settings={settings} onOpenAtlas={() => setAtlasFor(ex)} onAdvance={() => idx < session.exercises.length - 1 && goTo(idx + 1)} />
+      <ExercisePanel key={ex.exerciseId} session={session} ex={ex} sets={sets} settings={settings} onOpenAtlas={() => setAtlasFor(ex)} onAdvance={() => idx < session.exercises.length - 1 && goTo(idx + 1)} />
 
-      <div className="mt-4 flex gap-3">
-        <Button className="flex-1" disabled={idx === 0} onClick={() => goTo(idx - 1)}>
-          <ChevronLeft size={18} /> Poprzednie
-        </Button>
-        <Button className="flex-1" disabled={idx === session.exercises.length - 1} onClick={() => goTo(idx + 1)}>
-          Następne <ChevronRight size={18} />
-        </Button>
-      </div>
-
-      <div className="mt-6 text-center text-xs text-faint">
-        Serie robocze: {totalLogged}/{totalPlanned}. Każda seria zapisuje się od razu na urządzeniu.
-      </div>
-
-      <div className="sticky bottom-0 z-20 -mx-4 mt-4 space-y-2 border-t border-line/60 bg-bg/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl" id="workout-actions">
+      <div className="sticky bottom-0 z-20 -mx-4 mt-3 space-y-2 border-t border-line/60 bg-bg/95 px-4 pb-[max(0.5rem,var(--safe-bottom))] pt-2 backdrop-blur-xl" id="workout-actions">
         {session.restTimer && (
           <RestTimerBar
             timer={session.restTimer}
@@ -200,11 +213,33 @@ function ActiveWorkout({ session, sets, settings }: { session: Session; sets: Se
           />
         )}
         {allDone && (
-          <Button variant="go" size="lg" className="w-full" onClick={finish} data-testid="finish-workout">
+          <Button variant="go" className="w-full" onClick={finish} data-testid="finish-workout">
             <Flag size={20} /> Zakończ trening
           </Button>
         )}
-        <div id="set-action-slot" />
+        <div className="flex items-stretch gap-2">
+          <button
+            type="button"
+            disabled={prevName == null}
+            onClick={() => goTo(idx - 1)}
+            aria-label={prevName ? `Poprzednie ćwiczenie: ${prevName}` : 'Poprzednie ćwiczenie'}
+            data-testid="prev-exercise"
+            className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-line bg-surface-2 text-muted active:bg-surface-3 disabled:opacity-30"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <div id="set-action-slot" className="min-h-12 min-w-0 flex-1" />
+          <button
+            type="button"
+            disabled={nextName == null}
+            onClick={() => goTo(idx + 1)}
+            aria-label={nextName ? `Następne ćwiczenie: ${nextName}` : 'Następne ćwiczenie'}
+            data-testid="next-exercise"
+            className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-line bg-surface-2 text-muted active:bg-surface-3 disabled:opacity-30"
+          >
+            <ChevronRight size={22} />
+          </button>
+        </div>
       </div>
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Trening">
@@ -256,7 +291,6 @@ function NoteEditor({ session }: { session: Session }) {
 function ExercisePanel({
   session,
   ex,
-  index,
   sets,
   settings,
   onOpenAtlas,
@@ -264,7 +298,6 @@ function ExercisePanel({
 }: {
   session: Session
   ex: SessionExercise
-  index: number
   sets: SetEntry[]
   settings: Awaited<ReturnType<typeof getSettings>>
   onOpenAtlas: () => void
@@ -290,33 +323,23 @@ function ExercisePanel({
   const isExtra = type === 'working' && working.length >= ex.plannedSets
 
   return (
-    <div className="mt-3 space-y-3">
-      <Card className="p-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onOpenAtlas} className="relative h-16 w-20 shrink-0 overflow-hidden rounded-xl border border-line/60 bg-[#0d1628] min-[375px]:h-20 min-[375px]:w-24" aria-label={`Technika: ${ex.name}`}>
-            <ExerciseFigure exerciseId={ex.exerciseId} phase="end" className="h-full w-full" />
-            <span className="absolute bottom-1 right-1 rounded-md bg-bg/80 p-0.5 text-accent">
-              <BookOpen size={13} />
-            </span>
-          </button>
+    <div className="mt-2 space-y-2" onFocusCapture={(e) => keepClearOfBars(e.target)}>
+      <Card className="px-3 py-3" data-testid="exercise-card">
+        <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-faint">
-              Ćwiczenie {index + 1} z {session.exercises.length}
-            </div>
-            <h1 className="text-lg font-bold leading-tight tracking-tight min-[375px]:text-xl" data-testid="exercise-name">
+            <h1 className="line-clamp-2 text-lg font-bold leading-tight tracking-tight" data-testid="exercise-name">
               {ex.name}
             </h1>
+            <div className="tnum mt-0.5 text-sm text-muted">
+              {formatRange(ex)} · przerwa {formatRest(ex.restSec)}
+            </div>
           </div>
+          <button type="button" onClick={onOpenAtlas} className="-mr-1 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent active:bg-surface-2" aria-label={`Technika: ${ex.name}`} data-testid="open-atlas">
+            <BookOpen size={20} />
+          </button>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Pill tone="blue">{formatRange(ex)}</Pill>
-          <Pill>
-            {ex.plannedSets} {ex.plannedSets === 1 ? 'seria' : ex.plannedSets < 5 ? 'serie' : 'serii'}
-          </Pill>
-          <Pill>przerwa {formatRest(ex.restSec)}</Pill>
-        </div>
-        <div className="mt-2 flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm" data-testid="last-performance">
-          <History size={16} className="mt-0.5 shrink-0 text-faint" />
+        <div className="mt-1.5 flex items-start gap-1.5 text-sm" data-testid="last-performance">
+          <History size={15} className="mt-0.5 shrink-0 text-faint" />
           {ctx === undefined ? (
             <span className="text-faint">Wczytywanie…</span>
           ) : ctx.last ? (
@@ -325,11 +348,11 @@ function ExercisePanel({
               <span className="tnum font-medium">{summarizePerformance(ctx.last)}</span>
             </span>
           ) : (
-            <span className="text-faint">Pierwsza sesja tego ćwiczenia — dobierz ciężar zachowawczo (RIR {formatRir(session.targetRir)}).</span>
+            <span className="text-faint">Pierwsza sesja — dobierz ciężar zachowawczo.</span>
           )}
         </div>
         {ctx?.pending && (
-          <div className="mt-2 rounded-xl border border-go/30 bg-go/10 p-3">
+          <div className="mt-2 rounded-xl border border-go/30 bg-go/10 p-2.5">
             <div className="flex items-center gap-2 text-sm font-medium text-go">
               <TrendingUp size={16} /> Propozycja: {fmtKg(ctx.pending.fromWeightKg)} → {fmtKg(ctx.pending.toWeightKg)}
             </div>
@@ -343,48 +366,22 @@ function ExercisePanel({
             </div>
           </div>
         )}
-      </Card>
 
-      <Card className="p-2">
-        <ul className="m-0 list-none space-y-1 p-0" data-testid="set-list">
-          {warmups.map((s) => (
-            <SetRow key={s.id} label={`R${s.setNumber}`} warm s={s} ex={ex} onClick={() => setEditing(s)} />
-          ))}
-          {working.map((s) => (
-            <SetRow key={s.id} label={s.isExtra ? `+${s.setNumber}` : String(s.setNumber)} s={s} ex={ex} onClick={() => setEditing(s)} />
-          ))}
-          {working.length < ex.plannedSets && (
-            <li className={cx('flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm', type === 'working' ? 'border border-dashed border-accent/50 text-accent' : 'text-faint')}>
-              <span className="tnum w-7 font-semibold">{working.length + 1}</span>
-              <span className="flex-1">{type === 'working' ? 'Teraz' : 'Następna robocza'}</span>
-              {ex.plannedSets - working.length > 1 && <span className="text-xs text-faint">+{ex.plannedSets - working.length - 1} zaplanowane</span>}
-            </li>
-          )}
-        </ul>
-      </Card>
-
-      <Card className="px-3">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="grid shrink-0 grid-cols-2 rounded-xl bg-surface-2 p-1 text-sm" role="tablist">
-            {(['working', 'warmup'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={type === t}
-                onClick={() => setType(t)}
-                data-testid={`type-${t}`}
-                className={cx('min-h-11 rounded-lg px-3 font-medium', type === t ? 'bg-surface-3 text-ink' : 'text-muted')}
-              >
-                {t === 'working' ? 'Robocza' : 'Rozgrzewka'}
-              </button>
-            ))}
-          </div>
-          <div className="text-right text-sm font-semibold" data-testid="set-label">
+        <div className="mt-2 flex min-h-11 items-center justify-between gap-2 border-t border-line/60 pt-1">
+          <div className="text-base font-semibold" data-testid="set-label">
             {type === 'warmup' ? `Rozgrzewka ${nextNumber}` : isExtra ? `Seria dodatkowa ${nextNumber}` : `Seria ${nextNumber} z ${ex.plannedSets}`}
           </div>
+          {type === 'working' ? (
+            <button type="button" onClick={() => setType('warmup')} data-testid="type-warmup" className="-mr-1 min-h-11 rounded-xl px-2 text-sm text-muted active:bg-surface-2">
+              + rozgrzewka
+            </button>
+          ) : (
+            <button type="button" onClick={() => setType('working')} data-testid="type-working" className="-mr-1 min-h-11 rounded-xl px-2 text-sm text-accent active:bg-surface-2">
+              Wróć do serii roboczej
+            </button>
+          )}
         </div>
-        {type === 'warmup' && <p className="-mt-1 mb-3 text-xs text-muted">Serie rozgrzewkowe nie liczą się do objętości ani progresji. Typowo 1–2 serie: ~50% ×8, ~75% ×4.</p>}
+        {type === 'warmup' && <p className="mb-2 text-xs text-muted">Rozgrzewka nie liczy się do objętości ani progresji. Typowo ~50% ×8, ~75% ×4.</p>}
         {ctx === undefined ? (
           <div className="h-48" aria-busy="true" />
         ) : (
@@ -407,9 +404,39 @@ function ExercisePanel({
         )}
       </Card>
 
+      {mine.length > 0 && (
+        <Card className="px-1.5 py-1.5">
+          <ul className="m-0 list-none p-0" data-testid="set-list" aria-label="Zapisane serie">
+            {warmups.map((s) => (
+              <SetRow key={s.id} label={`R${s.setNumber}`} warm s={s} ex={ex} onClick={() => setEditing(s)} />
+            ))}
+            {working.map((s) => (
+              <SetRow key={s.id} label={s.isExtra ? `+${s.setNumber}` : String(s.setNumber)} s={s} ex={ex} onClick={() => setEditing(s)} />
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {editing && <SetEditSheet set={editing} ex={ex} weightStep={settings.weightStepKg} targetRir={session.targetRir} onClose={() => setEditing(null)} />}
     </div>
   )
+}
+
+/**
+ * After a field gets focus (and the software keyboard settles), scroll it so it is
+ * neither under the sticky header nor under the action bar / keyboard.
+ */
+function keepClearOfBars(target: EventTarget) {
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return
+  window.setTimeout(() => {
+    const r = target.getBoundingClientRect()
+    const header = document.querySelector('[data-testid=workout-header]')?.getBoundingClientRect().bottom ?? 0
+    const bar = document.getElementById('workout-actions')?.getBoundingClientRect().top ?? window.innerHeight
+    const vv = window.visualViewport
+    const bottom = Math.min(bar, vv ? vv.offsetTop + vv.height : window.innerHeight) - 8
+    if (r.bottom > bottom) window.scrollBy({ top: r.bottom - bottom })
+    else if (r.top < header + 8) window.scrollBy({ top: r.top - header - 8 })
+  }, 300)
 }
 
 function withCarry(d: SetDraft, carry: SetDraft | null): SetDraft {
@@ -428,7 +455,7 @@ function SetRow({ s, ex, label, warm = false, onClick }: { s: SetEntry; ex: Sess
   const skipped = s.status === 'skipped'
   return (
     <li>
-      <button type="button" onClick={onClick} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left active:bg-surface-2" data-testid="set-row">
+      <button type="button" onClick={onClick} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2.5 text-left active:bg-surface-2" data-testid="set-row" aria-label={`Popraw serię ${label}`}>
         <span className={cx('tnum w-7 font-semibold', warm ? 'text-warn' : skipped ? 'text-faint' : 'text-go')}>{label}</span>
         <span className={cx('tnum min-w-0 flex-1 truncate', skipped && 'text-faint line-through')}>{formatSetValue(s, ex)}</span>
         {s.type === 'working' && s.rir != null && !skipped && <span className="tnum text-sm text-muted">RIR {s.rir}</span>}
@@ -497,22 +524,28 @@ function SetForm({
     }
   }
 
-  const label = type === 'warmup' ? 'Zapisz rozgrzewkę' : isExtra ? 'Zapisz serię dodatkową' : 'Zapisz serię'
+  const label = type === 'warmup' ? 'Zapisz rozgrzewkę' : isExtra ? 'Zapisz dodatkową' : 'Zapisz serię'
 
   return (
     <>
-      <SetFields ex={ex} draft={draft} onChange={setDraft} weightStep={weightStep} targetRir={type === 'working' ? session.targetRir : undefined} />
+      <SetFields
+        ex={ex}
+        draft={draft}
+        onChange={setDraft}
+        weightStep={weightStep}
+        targetRir={type === 'working' ? session.targetRir : undefined}
+        extraAction={
+          type === 'working' && !isExtra ? (
+            <button type="button" disabled={busy} onClick={() => persist('skipped')} data-testid="skip-set" className="ml-auto inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-muted active:bg-surface-2 disabled:opacity-40">
+              Pomiń serię
+            </button>
+          ) : undefined
+        }
+      />
       <SaveBar>
-        <div className="flex gap-2">
-          {type === 'working' && !isExtra && (
-            <Button className="shrink-0" disabled={busy} onClick={() => persist('skipped')} data-testid="skip-set">
-              Pomiń
-            </Button>
-          )}
-          <Button variant="primary" size="lg" className="flex-1" disabled={busy} onClick={() => persist('done')} data-testid="save-set">
-            <Check size={22} /> {label}
-          </Button>
-        </div>
+        <Button variant="primary" className="h-full min-h-12 w-full px-3 text-base font-semibold" disabled={busy} onClick={() => persist('done')} data-testid="save-set">
+          <Check size={20} /> {label}
+        </Button>
       </SaveBar>
     </>
   )

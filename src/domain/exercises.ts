@@ -6,6 +6,12 @@ export interface ExerciseInfo {
   workout: WorkoutType
   muscles: { primary: string[]; secondary: string[] }
   equipment: string
+  /**
+   * Dumbbells moved per repetition (one side for unilateral work). Used only for
+   * the external-load volume figure; logged weight is always ONE dumbbell.
+   * 0 = bodyweight/timed (excluded from load volume).
+   */
+  dumbbells: 0 | 1 | 2
   start: string
   end: string
   direction: string
@@ -23,6 +29,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['czworogłowe uda', 'pośladkowe wielkie'], secondary: ['przywodziciele', 'prostowniki grzbietu', 'mięśnie brzucha'] },
     equipment: 'jeden hantel trzymany pionowo przy klatce',
+    dumbbells: 1,
     start: 'Stopy nieco szerzej niż biodra, palce lekko na zewnątrz. Hantel trzymany pionowo oburącz pod brodą, łokcie skierowane w dół.',
     end: 'Biodra opuszczone co najmniej do wysokości kolan (lub tak nisko, jak pozwala neutralny kręgosłup), kolana nad palcami stóp, tułów lekko pochylony, pięty na ziemi.',
     direction: 'W dół: jednocześnie ugnij biodra i kolana, siadając „między nogi”. W górę: wypchnij podłoże całą stopą do pełnego wyprostu.',
@@ -37,6 +44,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['piersiowy większy', 'triceps'], secondary: ['przedni akton naramiennego'] },
     equipment: 'dwa hantle, ławka płasko',
+    dumbbells: 2,
     start: 'Leżysz na ławce, stopy stabilnie na podłodze, łopatki ściągnięte i obniżone. Hantle nad klatką, ręce prawie wyprostowane.',
     end: 'Hantle opuszczone do boków klatki, łokcie ok. 45–60° od tułowia, przedramiona pionowo, lekkie rozciągnięcie klatki.',
     direction: 'W dół: kontrolowane opuszczanie po lekkim łuku do boków klatki. W górę: wypchnij hantle nad środek klatki.',
@@ -51,6 +59,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['najszerszy grzbietu', 'mięśnie środkowej części grzbietu (równoległoboczne, czworoboczny)'], secondary: ['tylny akton naramiennego', 'biceps'] },
     equipment: 'jeden hantel, ławka płasko',
+    dumbbells: 1,
     start: 'Kolano i dłoń tej samej strony na ławce, druga noga na podłodze. Plecy płasko, prawie równolegle do podłogi. Ręka z hantlem wyprostowana pod barkiem.',
     end: 'Hantel przyciągnięty w kierunku biodra, łokieć blisko tułowia i nieco powyżej linii pleców, łopatka ściągnięta.',
     direction: 'W górę: prowadź łokieć do tyłu i w stronę biodra (łuk). W dół: kontrolowany powrót do pełnego wyprostu ręki z lekkim wysunięciem łopatki.',
@@ -65,6 +74,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['dwugłowe uda (tylna taśma)', 'pośladkowe wielkie'], secondary: ['prostowniki grzbietu', 'przedramiona (chwyt)'] },
     equipment: 'dwa hantle',
+    dumbbells: 2,
     start: 'Stoisz prosto, stopy na szerokość bioder, hantle przed udami, kolana lekko ugięte, łopatki ściągnięte.',
     end: 'Biodra cofnięte maksymalnie do tyłu, tułów pochylony, plecy neutralne, hantle blisko nóg na wysokości połowy goleni (lub do pierwszego napięcia tyłu ud bez zaokrąglenia pleców).',
     direction: 'W dół: wypchnij biodra do tyłu, hantle suną po udach. W górę: wepchnij biodra do przodu do pełnego wyprostu, nie przeprostowując lędźwi.',
@@ -79,6 +89,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['boczny akton naramiennego'], secondary: ['czworoboczny (górna część)', 'nadgrzebieniowy'] },
     equipment: 'dwa lekkie hantle',
+    dumbbells: 2,
     start: 'Stoisz prosto, hantle po bokach ud, łokcie lekko ugięte, barki obniżone.',
     end: 'Ramiona uniesione bokiem do wysokości barków (ok. poziomu), łokcie lekko ugięte, łokieć na wysokości dłoni lub minimalnie wyżej.',
     direction: 'W górę: unoś bokiem po łuku, lekko przed linią tułowia. W dół: powoli wróć do boków.',
@@ -93,6 +104,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'A',
     muscles: { primary: ['mięsień prosty brzucha', 'poprzeczny brzucha'], secondary: ['skośne brzucha', 'pośladkowe', 'mięśnie obręczy barkowej'] },
     equipment: 'mata lub podłoga',
+    dumbbells: 0,
     start: 'Ustawienie: przedramiona na podłodze, łokcie pod barkami, kolana na podłodze, napięty brzuch i pośladki.',
     end: 'Pozycja utrzymania: kolana uniesione, ciało w jednej linii od głowy przez biodra do pięt, miednica lekko podwinięta.',
     direction: 'Unieś kolana, utrzymując prostą linię ciała. Trzymaj pozycję przez zadany czas — bez ruchu bioder.',
@@ -107,6 +119,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['piersiowy większy (część obojczykowa)', 'przedni akton naramiennego'], secondary: ['triceps'] },
     equipment: 'dwa hantle, ławka ustawiona na ok. 30°',
+    dumbbells: 2,
     start: 'Oparcie ławki ok. 30° (maksymalnie 45°). Plecy i głowa na oparciu, łopatki ściągnięte, stopy na podłodze. Hantle wyprostowane nad górną częścią klatki.',
     end: 'Hantle opuszczone do boków górnej części klatki, łokcie ok. 45–60° od tułowia, przedramiona pionowo.',
     direction: 'W dół: kontrolowane opuszczanie do górnej klatki. W górę: wypchnij hantle pionowo nad barki/górną klatkę.',
@@ -121,6 +134,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['czworogłowe uda', 'pośladkowe wielkie'], secondary: ['przywodziciele', 'dwugłowe uda', 'mięśnie stabilizujące biodro'] },
     equipment: 'dwa hantle trzymane wzdłuż tułowia',
+    dumbbells: 2,
     start: 'Stoisz prosto, stopy na szerokość bioder, hantle po bokach.',
     end: 'Jedna noga wykonała krok w tył, kolano tylnej nogi tuż nad podłogą, przednia goleń niemal pionowo, tułów lekko pochylony.',
     direction: 'W dół: krok w tył i kontrolowane opuszczenie bioder pionowo w dół. W górę: odepchnij się przednią nogą (cała stopa) i dostaw tylną nogę.',
@@ -135,6 +149,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['najszerszy grzbietu', 'równoległoboczne', 'czworoboczny (środkowa część)'], secondary: ['tylny akton naramiennego', 'biceps'] },
     equipment: 'dwa hantle, ławka ustawiona na ok. 30–45°',
+    dumbbells: 2,
     start: 'Leżysz przodem na skośnej ławce, klatka oparta o oparcie, stopy na podłodze. Ręce z hantlami zwisają pionowo pod barkami.',
     end: 'Hantle przyciągnięte do dolnych żeber, łokcie za linią tułowia, łopatki ściągnięte.',
     direction: 'W górę: ciągnij łokcie do tyłu i w górę. W dół: powoli wyprostuj ręce, pozwalając łopatkom lekko się rozsunąć.',
@@ -149,6 +164,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['naramienne (przedni i boczny akton)', 'triceps'], secondary: ['górna część czworobocznego', 'mięśnie brzucha (stabilizacja)'] },
     equipment: 'dwa hantle (na stojąco lub siedząc na ławce z pionowym oparciem)',
+    dumbbells: 2,
     start: 'Hantle na wysokości barków, łokcie lekko przed tułowiem i pod nadgarstkami, brzuch i pośladki napięte.',
     end: 'Ręce wyprostowane nad głową, hantle nad barkami, głowa „przechodzi” lekko do przodu pod rękami.',
     direction: 'W górę: wypchnij hantle pionowo w górę. W dół: kontrolowany powrót do wysokości barków.',
@@ -163,6 +179,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['pośladkowe wielkie'], secondary: ['dwugłowe uda', 'czworogłowe uda', 'prostowniki grzbietu'] },
     equipment: 'jeden hantel położony na biodrach, ławka płasko',
+    dumbbells: 1,
     start: 'Dolne części łopatek oparte o krawędź ławki, stopy na podłodze na szerokość bioder, hantel na kościach biodrowych przytrzymywany dłońmi. Biodra opuszczone.',
     end: 'Biodra uniesione do linii barki–biodra–kolana, goleń pionowo, broda lekko przyciągnięta, pośladki maksymalnie napięte.',
     direction: 'W górę: wypchnij biodra pionowo, rotując tułów wokół krawędzi ławki. W dół: kontrolowane opuszczenie bioder.',
@@ -177,6 +194,7 @@ export const EXERCISES: Record<ExerciseId, ExerciseInfo> = {
     workout: 'B',
     muscles: { primary: ['biceps ramienia', 'ramienny'], secondary: ['ramienno-promieniowy'] },
     equipment: 'dwa hantle',
+    dumbbells: 2,
     start: 'Stoisz prosto, ręce wyprostowane wzdłuż tułowia, dłonie skierowane do przodu (supinacja), łokcie przy bokach.',
     end: 'Przedramię uniesione do pełnego zgięcia łokcia, łokieć nadal przy tułowiu, hantel na wysokości barku.',
     direction: 'W górę: zginaj tylko w stawie łokciowym. W dół: powoli do pełnego wyprostu.',

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { exportViaUi, trackConsole } from './helpers'
 
 // Data written by the version with partial completion (backup format 2):

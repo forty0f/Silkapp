@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { trackConsole } from './helpers'
 
 test('full workout: log, rest timer, reload/resume, edit, skip, warm-up, extra set, finish', async ({ page }) => {
@@ -82,10 +82,14 @@ test('full workout: log, rest timer, reload/resume, edit, skip, warm-up, extra s
   // Finish early from the menu (incomplete sets are confirmed)
   await page.getByTestId('workout-menu').click()
   await page.getByTestId('menu-finish').click()
-  await expect(page.getByRole('dialog', { name: 'Zakończyć trening?' })).toContainText('Zapisano')
-  await page.getByTestId('confirm-ok').click()
+  // Partial: an explicit choice is required, nothing is preselected
+  const dialog = page.getByRole('dialog', { name: 'Trening częściowo ukończony' })
+  await expect(dialog).toContainText('z 12 zaplanowanych serii')
+  await expect(page.getByTestId('confirm-ok')).toHaveCount(0)
+  await page.getByTestId('finish-advance').click()
   await expect(page.getByTestId('workout-summary')).toBeVisible()
-  await expect(page.getByText('Trening A ukończony')).toBeVisible()
+  await expect(page.getByTestId('summary-title')).toHaveText('Trening A częściowo ukończony')
+  await expect(page.getByTestId('plan-choice')).toContainText('według planu')
 
   await page.getByTestId('summary-home').click()
   await expect(page.getByTestId('completed-count')).toHaveText('1')
