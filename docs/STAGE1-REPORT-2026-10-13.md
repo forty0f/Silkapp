@@ -1,3 +1,5 @@
+> **Aktualizacja:** reguła „≥ 1 seria = zaliczony” z sekcji 1 została zastąpiona trzema stanami treningu i wyborem „dalej / powtórz”, a stare puste treningi zachowują wpływ na plan — zob. `R1-R2-REPORT-AND-RELEASE-PLAN.md`.
+
 # Silkapp — Etap 1: naprawa logiki i uproszczenie ekranu treningu
 
 Gałąź: `claude/stage1-logic-ux` (z `main` @ e0c074e). **Nie wdrożono** na `main` ani GitHub Pages — czeka na akceptację.
