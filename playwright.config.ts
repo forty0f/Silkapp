@@ -27,8 +27,6 @@ export default defineConfig({
     { name: 'w320', use: { ...devices['iPhone SE'], viewport: { width: 320, height: 568 }, browserName: 'chromium' } },
     { name: 'w375', use: { ...devices['iPhone SE'], viewport: { width: 375, height: 667 }, browserName: 'chromium' } },
     { name: 'w390', use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, browserName: 'chromium' } },
-    // iPhone 15/16 size with simulated safe-area insets (see tests/e2e/fixtures.ts).
-    { name: 'w393-safe', use: { ...devices['iPhone 13'], viewport: { width: 393, height: 852 }, browserName: 'chromium' } },
     { name: 'w430', use: { ...devices['iPhone 15 Pro Max'], viewport: { width: 430, height: 932 }, browserName: 'chromium' } },
     { name: 'w768', use: { ...devices['iPad Mini'], viewport: { width: 768, height: 1024 }, browserName: 'chromium' } },
     { name: 'w1440', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },

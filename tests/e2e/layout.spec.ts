@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, test } from '@playwright/test'
 import { expectNoHorizontalOverflow, importSeed, trackConsole } from './helpers'
 
 const ROUTES = ['/', '/history', '/progress', '/atlas', '/atlas/one-arm-row', '/settings', '/settings/plan']
@@ -40,7 +40,7 @@ test('with history: screens, charts and active workout fit the viewport', async 
   await expect(page.getByTestId('input-weight')).not.toHaveValue('')
   for (let i = 0; i < 6; i++) {
     await page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) }).click()
-    await expect(page.getByRole('button', { name: new RegExp(`^${i + 1}\\. `) })).toHaveAttribute('aria-current', 'step')
+    await expect(page.getByText(`Ćwiczenie ${i + 1} z 6`)).toBeVisible()
     // Wait until the exercise's form (and its save button) has mounted.
     await expect(page.getByTestId('set-label')).toBeVisible()
     await expectNoHorizontalOverflow(page, `workout exercise ${i + 1}`)

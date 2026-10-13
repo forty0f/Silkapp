@@ -8,7 +8,7 @@ import { DEFAULT_WORKOUTS } from '../../domain/plan'
 import { comparePerformances, fmtKg } from '../../domain/progression'
 import { exerciseHistory, movingAverage, toDateKey, weeklySummaries } from '../../domain/metrics'
 import type { ExerciseId, Session } from '../../domain/types'
-import { fmtDate, fmtNum, fmtShort, fmtVolume, parseDecimal, toDate, todayKey } from '../../lib/format'
+import { fmtDate, fmtNum, fmtShort, parseDecimal, toDate, todayKey } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { PageHeader } from '../../components/PageHeader'
 import { Chart, SERIES } from '../../components/Chart'
@@ -16,7 +16,7 @@ import { Button, Card, EmptyState, SectionTitle, WorkoutBadge, cx } from '../../
 import { useFeedback } from '../../components/feedback'
 import { useHistoryData, type HistoryData } from '../useHistoryData'
 import { TrendIcon } from '../workout/WorkoutSummary'
-import { hasMaxDecimals, summarizePerformance } from '../workout/setDraft'
+import { summarizePerformance } from '../workout/setDraft'
 
 type Tab = 'exercises' | 'body' | 'weeks'
 
@@ -149,7 +149,7 @@ function ExercisesTab({ data }: { data: HistoryData }) {
 
           <SectionTitle>Objętość treningowa</SectionTitle>
           <Card className="p-3">
-            <h3 className="mb-1 text-sm font-semibold">{timed ? 'Łączny czas (s)' : loaded ? 'Σ ciężar hantli × liczba hantli × powtórzenia (kg)' : 'Łączne powtórzenia'}</h3>
+            <h3 className="mb-1 text-sm font-semibold">{timed ? 'Łączny czas (s)' : loaded ? 'Objętość: Σ ciężar × powtórzenia (kg)' : 'Łączne powtórzenia'}</h3>
             <Chart
               kind="bar"
               ariaLabel={`${ex.name}: objętość`}
@@ -157,7 +157,7 @@ function ExercisesTab({ data }: { data: HistoryData }) {
               series={[{ name: 'Objętość', color: SERIES.secondary, points: points.map((p) => ({ label: fmtShort(p.date), value: timed || !loaded ? p.totalValue : Math.round(p.volumeKg), detail: `${p.workingSets} serii` })) }]}
             />
             <p className="mt-2 flex gap-2 text-xs text-faint">
-              <Info size={14} className="mt-px shrink-0" /> {loaded && !timed ? 'Liczone tylko obciążenie zewnętrzne (bez masy ciała). ' : ''}Rośnie też od samego dodania serii (T1 → T4). To nie jest miara siły — siłę pokazują wykresy powyżej.
+              <Info size={14} className="mt-px shrink-0" /> Objętość rośnie też od dodania serii (T1 → T4). To nie jest miara siły — siłę pokazują wykresy powyżej.
             </p>
           </Card>
 
@@ -197,9 +197,7 @@ function BodyTab() {
     const w = parseDecimal(weight)
     const p = parseDecimal(waist)
     if (weight && (w == null || w < 25 || w > 350)) return toast('Masa ciała poza zakresem 25–350 kg.', 'error')
-    if (w != null && !hasMaxDecimals(w, 2)) return toast('Masa ciała: maksymalnie 2 miejsca po przecinku.', 'error')
     if (waist && (p == null || p < 40 || p > 250)) return toast('Obwód pasa poza zakresem 40–250 cm.', 'error')
-    if (p != null && !hasMaxDecimals(p, 1)) return toast('Obwód pasa: maksymalnie 1 miejsce po przecinku (np. 92,5 cm).', 'error')
     if (w == null && p == null) return toast('Podaj masę ciała lub obwód pasa.', 'error')
     setBusy(true)
     try {
@@ -356,8 +354,8 @@ function WeeksTab({ data }: { data: HistoryData }) {
                   <div className="text-[11px] text-muted">serie robocze</div>
                 </div>
                 <div className="rounded-xl bg-surface-2 p-2">
-                  <div className="tnum font-bold">{fmtVolume(w.volumeKg)}</div>
-                  <div className="text-[11px] text-muted">ciężar × powt.</div>
+                  <div className="tnum font-bold">{fmtNum(w.volumeKg / 1000, 1)} t</div>
+                  <div className="text-[11px] text-muted">objętość</div>
                 </div>
               </div>
             </Card>

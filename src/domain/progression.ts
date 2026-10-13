@@ -128,96 +128,45 @@ export function evaluatePerformance(perf: ExercisePerformance, weightStepKg: num
   return { status: 'hold', reasons, workingWeightKg: maxWeight, suggestedWeightKg: null }
 }
 
-/**
- * first        — no earlier performance
- * improved     — same load; more reps (or same reps with clearly more reserve) and effort not clearly higher
- * same         — same load and reps; no clear change in effort
- * declined     — same load; fewer reps (or same reps with clearly less reserve) and effort not clearly lower
- * load-changed — top load differs; reported neutrally (load, reps and RIR shown separately)
- * unclear      — results not comparable (reps and effort moved in opposite directions, or RIR not rated)
- */
-export type Trend = 'first' | 'improved' | 'same' | 'declined' | 'load-changed' | 'unclear'
+export type Trend = 'first' | 'improved' | 'same' | 'declined' | 'heavier' | 'lighter'
 
 export interface Comparison {
   trend: Trend
   detail: string
 }
 
-/** "Clearly" = average RIR change of at least one rep per compared set (RIR is an estimate). */
-const RIR_CLEAR_CHANGE = 1
-
-const fmtList = (vals: (number | string | null)[]) => vals.map((v) => (v == null ? '?' : String(v).replace('.', ','))).join('·')
-
-function repsLabel(s: SetEntry, ex: Pick<SessionExercise, 'unit' | 'perSide'>): string {
-  if (ex.unit === 'seconds') return `${s.durationSec ?? '?'}s`
-  if (ex.perSide) return `${s.repsLeft ?? '?'}/${s.repsRight ?? '?'}`
-  return `${s.reps ?? '?'}`
-}
-
 /**
- * Compares two performances of the same exercise without building any
- * composite "strength score": load, reps and RIR are judged separately and
- * only like-for-like sets (same top load, same set positions) are compared.
- * Adding sets (T1→T4 volume ramp) never registers as a strength gain.
+ * Strength comparison between two performances of the same exercise.
+ * Only sets present in both sessions are compared, so adding sets (T1→T4
+ * volume ramp) never registers as a strength gain.
  */
 export function comparePerformances(curr: ExercisePerformance, prev: ExercisePerformance | null): Comparison {
   if (!prev) return { trend: 'first', detail: 'Pierwsza sesja tego ćwiczenia.' }
   const ex = curr.exercise
   const a = doneWorkingSets(curr.sets)
   const b = doneWorkingSets(prev.sets)
-  if (a.length === 0 || b.length === 0) return { trend: 'unclear', detail: 'Brak porównywalnych serii.' }
-
-  const reps = (arr: SetEntry[]) => fmtList(arr.map((s) => repsLabel(s, ex)))
-  const rirs = (arr: SetEntry[]) => fmtList(arr.map((s) => s.rir))
+  if (a.length === 0 || b.length === 0) return { trend: 'first', detail: 'Brak porównywalnych serii.' }
 
   if (ex.loaded) {
     const wa = Math.max(...a.map((s) => s.weightKg ?? 0))
     const wb = Math.max(...b.map((s) => s.weightKg ?? 0))
-    if (wa !== wb) {
-      return {
-        trend: 'load-changed',
-        detail: `Ciężar ${fmtKg(wb)} → ${fmtKg(wa)} · powt. ${reps(b)} → ${reps(a)} · RIR ${rirs(b)} → ${rirs(a)}`,
-      }
+    if (wa > wb) {
+      const ok = a.filter((s) => (s.weightKg ?? 0) === wa).every((s) => (setValue(s, ex) ?? 0) >= ex.repMin)
+      return ok
+        ? { trend: 'improved', detail: `Większy ciężar: ${fmtKg(wb)} → ${fmtKg(wa)}.` }
+        : { trend: 'heavier', detail: `Większy ciężar (${fmtKg(wa)}), ale część serii poniżej zakresu.` }
     }
+    if (wa < wb) return { trend: 'lighter', detail: `Mniejszy ciężar: ${fmtKg(wb)} → ${fmtKg(wa)}.` }
   }
 
   const n = Math.min(a.length, b.length)
-  const ca = a.slice(0, n)
-  const cb = b.slice(0, n)
-  const sum = (arr: SetEntry[]) => arr.reduce((acc, s) => acc + (setValue(s, ex) ?? 0), 0)
-  const dReps = sum(ca) - sum(cb)
-  const loadTxt = ex.loaded ? `${fmtKg(Math.max(...a.map((s) => s.weightKg ?? 0)))} · ` : ''
-  const base = `${loadTxt}${ex.unit === 'seconds' ? 'czas' : 'powt.'} ${reps(cb)} → ${reps(ca)}`
-
-  if (ex.unit === 'seconds') {
-    // Timed holds have no RIR; seconds are directly comparable.
-    if (dReps > 0) return { trend: 'improved', detail: `${base} (+${dReps} s)` }
-    if (dReps < 0) return { trend: 'declined', detail: `${base} (${dReps} s)` }
-    return { trend: 'same', detail: base }
-  }
-
-  const rirRated = [...ca, ...cb].every((s) => s.rir != null)
-  const rirTxt = ` · RIR ${rirs(cb)} → ${rirs(ca)}`
-  if (!rirRated) {
-    if (dReps === 0) return { trend: 'same', detail: `${base}${rirTxt} — RIR nieoceniony, wysiłku nie porównano` }
-    return { trend: 'unclear', detail: `${base}${rirTxt} — bez oceny RIR nie da się stwierdzić zmiany siły` }
-  }
-  const dRirAvg = (ca.reduce((x, s) => x + s.rir!, 0) - cb.reduce((x, s) => x + s.rir!, 0)) / n
-  const lessReserve = dRirAvg <= -RIR_CLEAR_CHANGE
-  const moreReserve = dRirAvg >= RIR_CLEAR_CHANGE
-  if (dReps > 0) {
-    return lessReserve
-      ? { trend: 'unclear', detail: `${base}${rirTxt} — więcej powtórzeń przy wyraźnie mniejszym zapasie; nieporównywalne` }
-      : { trend: 'improved', detail: `${base}${rirTxt}` }
-  }
-  if (dReps < 0) {
-    return moreReserve
-      ? { trend: 'unclear', detail: `${base}${rirTxt} — mniej powtórzeń przy wyraźnie większym zapasie; nieporównywalne` }
-      : { trend: 'declined', detail: `${base}${rirTxt}` }
-  }
-  if (moreReserve) return { trend: 'improved', detail: `${base}${rirTxt} — te same powtórzenia z większym zapasem` }
-  if (lessReserve) return { trend: 'declined', detail: `${base}${rirTxt} — te same powtórzenia z mniejszym zapasem` }
-  return { trend: 'same', detail: `${base}${rirTxt}` }
+  const sum = (arr: SetEntry[]) => arr.slice(0, n).reduce((acc, s) => acc + (setValue(s, ex) ?? 0), 0)
+  const sa = sum(a)
+  const sb = sum(b)
+  const unit = ex.unit === 'seconds' ? 's' : 'powt.'
+  if (sa > sb) return { trend: 'improved', detail: `+${sa - sb} ${unit} w ${n} porównywalnych seriach.` }
+  if (sa < sb) return { trend: 'declined', detail: `${sa - sb} ${unit} w ${n} porównywalnych seriach.` }
+  return { trend: 'same', detail: `Bez zmian w ${n} porównywalnych seriach.` }
 }
 
 export function fmtKg(v: number | null | undefined): string {

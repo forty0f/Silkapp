@@ -56,7 +56,7 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
   )
 }
 
-export function Pill({ children, tone = 'neutral', className, ...rest }: { children: ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red'; className?: string } & React.HTMLAttributes<HTMLSpanElement>) {
+export function Pill({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red'; className?: string }) {
   const tones = {
     neutral: 'bg-surface-3 text-muted',
     blue: 'bg-accent/15 text-accent',
@@ -64,11 +64,7 @@ export function Pill({ children, tone = 'neutral', className, ...rest }: { child
     amber: 'bg-warn/15 text-warn',
     red: 'bg-danger/15 text-danger',
   }
-  return (
-    <span className={cx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium', tones[tone], className)} {...rest}>
-      {children}
-    </span>
-  )
+  return <span className={cx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium', tones[tone], className)}>{children}</span>
 }
 
 export function WorkoutBadge({ type, size = 'md' }: { type: 'A' | 'B'; size?: 'sm' | 'md' | 'lg' }) {
@@ -107,7 +103,7 @@ function NumberText({ value, onChange, min, max, decimals, label, testId }: { va
       inputMode={decimals ? 'decimal' : 'numeric'}
       enterKeyHint="done"
       autoComplete="off"
-      className="tnum w-full min-w-0 bg-transparent text-center text-xl font-semibold outline-none min-[375px]:text-2xl"
+      className="tnum w-full min-w-0 bg-transparent text-center text-2xl font-semibold outline-none"
       value={text}
       placeholder="–"
       onChange={(e) => {
@@ -154,16 +150,16 @@ export function Stepper({
   }
   return (
     <div className="min-w-0 flex-1">
-      <div className="mb-1 text-xs font-medium text-muted">{label}</div>
+      <div className="mb-1.5 text-xs font-medium text-muted">{label}</div>
       <div className="flex items-stretch overflow-hidden rounded-2xl border border-line bg-surface-2">
-        <button type="button" aria-label={`${label}: mniej`} className="flex w-10 shrink-0 min-[375px]:w-12 items-center justify-center text-muted active:bg-surface-3" onClick={() => bump(-step)}>
+        <button type="button" aria-label={`${label}: mniej`} className="flex w-12 shrink-0 items-center justify-center text-muted active:bg-surface-3" onClick={() => bump(-step)}>
           <Minus size={20} />
         </button>
         <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1 py-2">
           <NumberText value={value} onChange={onChange} min={min} max={max} decimals={decimals} label={label} testId={testId} />
-          {unit && <span className="shrink-0 pr-1 text-xs text-faint max-[374px]:hidden">{unit}</span>}
+          {unit && <span className="shrink-0 pr-1 text-xs text-faint">{unit}</span>}
         </div>
-        <button type="button" aria-label={`${label}: więcej`} className="flex w-10 shrink-0 min-[375px]:w-12 items-center justify-center text-muted active:bg-surface-3" onClick={() => bump(step)}>
+        <button type="button" aria-label={`${label}: więcej`} className="flex w-12 shrink-0 items-center justify-center text-muted active:bg-surface-3" onClick={() => bump(step)}>
           <Plus size={20} />
         </button>
       </div>
@@ -201,8 +197,8 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div>
-        {footer && <div className="border-t border-line/60 px-5 pb-[max(1rem,var(--safe-bottom))] pt-3">{footer}</div>}
-        {!footer && <div className="pb-[var(--safe-bottom)]" />}
+        {footer && <div className="border-t border-line/60 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
+        {!footer && <div className="pb-[env(safe-area-inset-bottom)]" />}
       </div>
     </div>
   )

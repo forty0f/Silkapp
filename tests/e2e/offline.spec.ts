@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, test } from '@playwright/test'
 
 test('works offline after first load (service worker) and keeps saving', async ({ page, context }) => {
   await page.goto('./')

@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { activeDurationMs, sessionVolume, toDateKey } from '../../domain/metrics'
+import { sessionVolume, toDateKey } from '../../domain/metrics'
 import type { Session } from '../../domain/types'
-import { fmtDay, fmtDuration, fmtMonth, fmtTime, fmtVolume } from '../../lib/format'
+import { fmtDay, fmtDuration, fmtMonth, fmtNum, fmtTime } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { PageHeader } from '../../components/PageHeader'
 import { Card, EmptyState, Pill, SectionTitle, WorkoutBadge, cx } from '../../components/ui'
 import { useHistoryData } from '../useHistoryData'
-import { sessionLabel } from '../sessionStatus'
 
 const WEEKDAYS = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
 
@@ -35,7 +34,7 @@ function Calendar({ sessions }: { sessions: Session[] }) {
   const today = toDateKey(new Date())
   const monthCount = sessions.filter((s) => {
     const d = new Date(s.startedAt)
-    return d.getFullYear() === cursor.getFullYear() && d.getMonth() === cursor.getMonth() && s.status !== 'in_progress'
+    return d.getFullYear() === cursor.getFullYear() && d.getMonth() === cursor.getMonth() && s.status === 'completed'
   }).length
 
   return (
@@ -100,12 +99,10 @@ function Calendar({ sessions }: { sessions: Session[] }) {
 export function HistoryPage() {
   const data = useHistoryData()
   if (!data) return null
-  const counted = new Set(data.completed.map((s) => s.id))
   return (
     <div className="pb-4">
-      <PageHeader title="Historia" subtitle={`${data.completed.length} wykonanych treningów`} />
-      {/* Calendar shows counted trainings and the one in progress; cancelled/empty ones stay in the list only. */}
-      <Calendar sessions={data.sessions.filter((s) => s.status === 'in_progress' || counted.has(s.id))} />
+      <PageHeader title="Historia" subtitle={`${data.completed.length} ukończonych treningów`} />
+      <Calendar sessions={data.sessions} />
       <SectionTitle>Wszystkie sesje</SectionTitle>
       {data.sessions.length === 0 ? (
         <EmptyState icon={<CalendarDays size={26} />} title="Historia jest pusta">
@@ -116,28 +113,23 @@ export function HistoryPage() {
           {data.sessions.map((s) => {
             const sets = data.setsBySession.get(s.id) ?? []
             const v = sessionVolume(s, sets)
-            const dur = activeDurationMs(s, sets)
-            const label = sessionLabel(s, sets)
-            const notCounted = label.muted
+            const dur = s.finishedAt ? new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime() : null
             return (
               <li key={s.id}>
                 <button
                   type="button"
                   onClick={() => navigate(s.status === 'in_progress' ? `/workout/${s.id}` : `/history/${s.id}`)}
-                  className={cx('flex w-full items-center gap-3 rounded-2xl border border-line/70 bg-surface p-3 text-left active:bg-surface-2', notCounted && 'opacity-60')}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-line/70 bg-surface p-3 text-left active:bg-surface-2"
                 >
                   <WorkoutBadge type={s.workoutType} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{fmtDay(s.startedAt)}</span>
-                      {label.kind !== 'full' && (
-                        <Pill tone={label.tone} data-testid="session-label">
-                          {label.text}
-                        </Pill>
-                      )}
+                      {s.status === 'in_progress' && <Pill tone="amber">w toku</Pill>}
+                      {s.status === 'cancelled' && <Pill>anulowany</Pill>}
                     </div>
                     <div className="tnum truncate text-sm text-muted">
-                      T{s.week}/{s.slot} · {v.workingSets} serii{v.volumeKg > 0 ? ` · ${fmtVolume(v.volumeKg)}` : ''}{dur != null ? ` · ${fmtDuration(dur)}` : ` · od ${fmtTime(s.startedAt)}`}
+                      T{s.week}/{s.slot} · {v.workingSets} serii · {fmtNum(v.volumeKg / 1000, 2)} t{dur != null ? ` · ${fmtDuration(dur)}` : ` · od ${fmtTime(s.startedAt)}`}
                     </div>
                   </div>
                   <ChevronRight size={18} className="shrink-0 text-faint" />

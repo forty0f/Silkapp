@@ -1,22 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowDown, ArrowRight, ArrowRightLeft, ArrowUp, CheckCircle2, CircleDashed, HelpCircle, Minus, RotateCcw, TrendingUp, XCircle } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, CheckCircle2, Minus, RotateCcw, TrendingUp, XCircle } from 'lucide-react'
 import { db } from '../../db/db'
 import { decideSuggestion, getSettings, lastPerformance, performanceFor, reopenSession } from '../../db/repo'
 import { comparePerformances, evaluatePerformance, fmtKg, type Comparison, type Evaluation } from '../../domain/progression'
-import { activeDurationMs, sessionVolume } from '../../domain/metrics'
+import { sessionVolume } from '../../domain/metrics'
 import type { Session, SetEntry, Suggestion } from '../../domain/types'
-import { fmtDay, fmtDuration, fmtVolume } from '../../lib/format'
+import { fmtDay, fmtDuration, fmtNum } from '../../lib/format'
 import { navigate } from '../../lib/router'
 import { Button, Card, Pill, SectionTitle, cx } from '../../components/ui'
 import { useFeedback } from '../../components/feedback'
 import { summarizePerformance } from './setDraft'
-import { PlanChoiceRow, sessionLabel } from '../sessionStatus'
 
 export function TrendIcon({ trend }: { trend: Comparison['trend'] }) {
   if (trend === 'improved') return <ArrowUp size={16} className="text-go" aria-label="poprawa" />
-  if (trend === 'declined') return <ArrowDown size={16} className="text-warn" aria-label="spadek" />
-  if (trend === 'load-changed') return <ArrowRightLeft size={16} className="text-accent" aria-label="inny ciężar — porównaj ręcznie" />
-  if (trend === 'unclear') return <HelpCircle size={16} className="text-faint" aria-label="nieporównywalne" />
+  if (trend === 'declined' || trend === 'lighter') return <ArrowDown size={16} className="text-warn" aria-label="spadek" />
+  if (trend === 'heavier') return <ArrowUp size={16} className="text-accent" aria-label="większy ciężar" />
   if (trend === 'first') return <ArrowRight size={16} className="text-faint" aria-label="pierwsza sesja" />
   return <Minus size={16} className="text-muted" aria-label="bez zmian" />
 }
@@ -78,10 +76,7 @@ export function WorkoutSummary({ session, sets }: { session: Session; sets: SetE
   }, [session, sets])
 
   const vol = sessionVolume(session, sets)
-  const duration = activeDurationMs(session, sets) ?? 0
-  const label = sessionLabel(session, sets)
-  const cancelled = label.muted
-  const heading = label.kind === 'partial' ? 'częściowo ukończony' : label.kind === 'full' ? 'ukończony' : label.kind === 'empty' ? 'bez wykonanych serii' : 'anulowany'
+  const duration = session.finishedAt ? new Date(session.finishedAt).getTime() - new Date(session.startedAt).getTime() : 0
 
   const reopen = async () => {
     if (!(await confirm({ title: 'Wznowić ten trening?', body: 'Trening wróci do stanu „w toku” — możesz dopisać lub poprawić serie i zakończyć go ponownie.', confirmLabel: 'Wznów' }))) return
@@ -93,35 +88,28 @@ export function WorkoutSummary({ session, sets }: { session: Session; sets: SetE
   }
 
   return (
-    <div className="pb-8 pt-[max(1rem,var(--safe-top))]" data-testid="workout-summary">
+    <div className="pb-8 pt-[max(1rem,env(safe-area-inset-top))]" data-testid="workout-summary">
       <div className="flex flex-col items-center pb-2 pt-4 text-center">
-        {cancelled ? <XCircle size={44} className="text-faint" /> : label.kind === 'partial' ? <CircleDashed size={44} className="text-accent" /> : <CheckCircle2 size={44} className="text-go" />}
-        <h1 className="mt-2 text-2xl font-bold tracking-tight" data-testid="summary-title">
-          Trening {session.workoutType} {heading}
+        {session.status === 'cancelled' ? <XCircle size={44} className="text-faint" /> : <CheckCircle2 size={44} className="text-go" />}
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          Trening {session.workoutType} {session.status === 'cancelled' ? 'anulowany' : 'ukończony'}
         </h1>
         <p className="text-sm text-muted">
           {fmtDay(session.startedAt)} · tydzień {session.week}, sesja {session.slot}/3
         </p>
-        {label.kind === 'cancelled' && <p className="mt-2 text-sm text-muted" data-testid="cancelled-note">Brak wykonanych serii roboczych — trening nie jest zaliczony i nie przesuwa planu.</p>}
-        {label.kind === 'partial' && <p className="tnum mt-1 text-sm text-muted">{label.text.replace('częściowy ', 'wykonane serie ').replace(' · powtórzony', '')}</p>}
       </div>
-      {label.kind === 'partial' && (
-        <div className="mt-2">
-          <PlanChoiceRow session={session} />
-        </div>
-      )}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
         <Card className="p-3">
           <div className="tnum text-xl font-bold">{fmtDuration(duration)}</div>
-          <div className="text-xs text-muted">czas aktywny</div>
+          <div className="text-xs text-muted">czas</div>
         </Card>
         <Card className="p-3">
           <div className="tnum text-xl font-bold">{vol.workingSets}</div>
           <div className="text-xs text-muted">serie robocze</div>
         </Card>
         <Card className="p-3">
-          <div className="tnum text-xl font-bold" data-testid="summary-volume">{fmtVolume(vol.volumeKg)}</div>
-          <div className="text-xs text-muted">ciężar × powt.*</div>
+          <div className="tnum text-xl font-bold">{fmtNum(vol.volumeKg / 1000, 2)} t</div>
+          <div className="text-xs text-muted">objętość*</div>
         </Card>
       </div>
 
@@ -150,7 +138,7 @@ export function WorkoutSummary({ session, sets }: { session: Session; sets: SetE
         ))}
       </div>
       <p className="mt-3 px-1 text-xs text-faint">
-        * Suma: ciężar hantli × liczba hantli × powtórzenia (obie strony). Nie obejmuje masy ciała (np. wykroki, hip thrust) ani deski, więc nie oddaje całej pracy. Rośnie też od samego dodania serii — nie jest miarą siły. Siłę oceniaj po ciężarze, powtórzeniach i RIR w porównywalnych seriach (strzałki powyżej). Czas aktywny pomija przerwy dłuższe niż 30 min.
+        * Objętość (kg × powtórzenia) rośnie także od samego dodania serii w kolejnych tygodniach — nie jest miarą siły. Siłę oceniaj po ciężarze i powtórzeniach w porównywalnych seriach (strzałki powyżej).
       </p>
 
       <div className="mt-6 space-y-2">

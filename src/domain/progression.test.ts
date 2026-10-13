@@ -111,13 +111,11 @@ describe('comparePerformances', () => {
     expect(comparePerformances(curr, prev).trend).toBe('same')
   })
 
-  it('a different load is never auto-labelled as strength gain or loss', () => {
-    const up = comparePerformances(perf([set({ weightKg: 18, reps: 8 })]), perf([set({ weightKg: 16, reps: 12 })]))
-    expect(up.trend).toBe('load-changed')
-    expect(up.detail).toContain('16 kg → 18 kg')
-    expect(up.detail).toContain('12 → 8')
-    expect(comparePerformances(perf([set({ weightKg: 14 })]), perf([set({ weightKg: 16 })])).trend).toBe('load-changed')
+  it('heavier weight within range = improved; fewer reps = declined', () => {
+    expect(comparePerformances(perf([set({ weightKg: 18, reps: 8 })]), perf([set({ weightKg: 16, reps: 12 })])).trend).toBe('improved')
+    expect(comparePerformances(perf([set({ weightKg: 18, reps: 6 })]), perf([set({ weightKg: 16, reps: 12 })])).trend).toBe('heavier')
     expect(comparePerformances(perf([set({ reps: 9 })]), perf([set({ reps: 11 })])).trend).toBe('declined')
+    expect(comparePerformances(perf([set({ weightKg: 14 })]), perf([set({ weightKg: 16 })])).trend).toBe('lighter')
   })
 })
 

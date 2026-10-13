@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, test } from '@playwright/test'
 import { exportViaUi, importSeed } from './helpers'
 
 test('import seed → history, progression suggestion prefill, export round-trip, undo import', async ({ page }) => {

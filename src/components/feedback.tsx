@@ -15,19 +15,11 @@ interface ConfirmOptions {
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
-  /**
-   * Alternative actions instead of the single confirm button. None is preselected;
-   * choose() resolves with the chosen value (or null when cancelled).
-   */
-  choices?: { label: string; value: string; testId?: string }[]
 }
-
-type ChoiceOptions = ConfirmOptions & { choices: NonNullable<ConfirmOptions['choices']> }
 
 interface FeedbackApi {
   toast: (text: string, tone?: ToastTone) => void
   confirm: (o: ConfirmOptions) => Promise<boolean>
-  choose: (o: ChoiceOptions) => Promise<string | null>
 }
 
 const Ctx = createContext<FeedbackApi | null>(null)
@@ -41,7 +33,7 @@ export function useFeedback(): FeedbackApi {
 export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [dialog, setDialog] = useState<ConfirmOptions | null>(null)
-  const resolver = useRef<((v: boolean | string) => void) | null>(null)
+  const resolver = useRef<((v: boolean) => void) | null>(null)
   const seq = useRef(0)
 
   const toast = useCallback((text: string, tone: ToastTone = 'info') => {
@@ -54,30 +46,22 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     resolver.current?.(false)
     setDialog(o)
     return new Promise<boolean>((resolve) => {
-      resolver.current = (v) => resolve(v === true)
+      resolver.current = resolve
     })
   }, [])
 
-  const choose = useCallback((o: ChoiceOptions) => {
-    resolver.current?.(false)
-    setDialog(o)
-    return new Promise<string | null>((resolve) => {
-      resolver.current = (v) => resolve(typeof v === 'string' ? v : null)
-    })
-  }, [])
-
-  const close = (v: boolean | string) => {
+  const close = (v: boolean) => {
     resolver.current?.(v)
     resolver.current = null
     setDialog(null)
   }
 
-  const api = useMemo(() => ({ toast, confirm, choose }), [toast, confirm, choose])
+  const api = useMemo(() => ({ toast, confirm }), [toast, confirm])
 
   return (
     <Ctx.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex flex-col items-center gap-2 px-4 pt-[max(0.75rem,var(--safe-top))]" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex flex-col items-center gap-2 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
@@ -99,27 +83,14 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         onClose={() => close(false)}
         title={dialog?.title ?? ''}
         footer={
-          dialog?.choices ? (
-            <div className="space-y-2">
-              {dialog.choices.map((c) => (
-                <Button key={c.value} variant="primary" className="w-full" onClick={() => close(c.value)} data-testid={c.testId}>
-                  {c.label}
-                </Button>
-              ))}
-              <Button className="w-full" onClick={() => close(false)} data-testid="choice-cancel">
-                {dialog.cancelLabel ?? 'Anuluj'}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <Button className="flex-1" onClick={() => close(false)}>
-                {dialog?.cancelLabel ?? 'Anuluj'}
-              </Button>
-              <Button className="flex-1" variant={dialog?.danger ? 'danger' : 'primary'} onClick={() => close(true)} data-testid="confirm-ok">
-                {dialog?.confirmLabel ?? 'Potwierdź'}
-              </Button>
-            </div>
-          )
+          <div className="flex gap-3">
+            <Button className="flex-1" onClick={() => close(false)}>
+              {dialog?.cancelLabel ?? 'Anuluj'}
+            </Button>
+            <Button className="flex-1" variant={dialog?.danger ? 'danger' : 'primary'} onClick={() => close(true)} data-testid="confirm-ok">
+              {dialog?.confirmLabel ?? 'Potwierdź'}
+            </Button>
+          </div>
         }
       >
         <div className="text-muted">{dialog?.body}</div>

@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { expect, test } from './fixtures'
+import { expect, test } from '@playwright/test'
 
 // The Pages config overrides this to rebuild its own output directory.
 const BUILD = process.env.E2E_BUILD_CMD ?? 'npx vite build'
@@ -27,7 +27,7 @@ test('PWA update: new version is offered, applied, and all data survives', async
   await page.getByTestId('save-set').click()
   await page.getByTestId('workout-menu').click()
   await page.getByTestId('menu-finish').click()
-  await page.getByTestId('finish-advance').click() // partial workout → explicit plan choice
+  await page.getByTestId('confirm-ok').click()
   await page.getByTestId('summary-home').click()
   await page.getByTestId('start-workout').click()
   await page.getByTestId('input-weight').fill('12')
