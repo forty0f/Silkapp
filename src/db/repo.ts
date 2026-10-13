@@ -1,5 +1,6 @@
 import { createDefaultPlan } from '../domain/plan'
 import { evaluatePerformance, type ExercisePerformance } from '../domain/progression'
+import { advancesPlan } from '../domain/sessionState'
 import { buildSessionExercises, nextWorkoutType, positionFor, targetRirFor } from '../domain/schedule'
 import type {
   BodyMetric,
@@ -73,7 +74,7 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Prom
 }
 
 export async function completedSessions(programId: string): Promise<Session[]> {
-  const list = await db.sessions.where('[programId+status]').equals([programId, 'completed']).toArray()
+  const list = (await db.sessions.where('[programId+status]').equals([programId, 'completed']).toArray()).filter(advancesPlan)
   return list.sort((a, b) => a.sessionNumber - b.sessionNumber || a.startedAt.localeCompare(b.startedAt))
 }
 
@@ -347,7 +348,8 @@ export async function reopenSession(id: string): Promise<void> {
       if (other && other.id !== id) throw new Error('Najpierw zakończ lub odrzuć trwający trening.')
       const session = await db.sessions.get(id)
       if (!session) throw new Error('Sesja nie istnieje.')
-      await db.sessions.update(id, { status: 'in_progress', finishedAt: null, updatedAt: nowIso() })
+      // planAdvance belongs to a finished session only; it is chosen again on finishing.
+      await db.sessions.update(id, { status: 'in_progress', finishedAt: null, planAdvance: undefined, updatedAt: nowIso() })
       // Suggestions derived from this session no longer stand while it is being edited;
       // the previous completed performance becomes the basis again until it is finished.
       for (const ex of session.exercises) await reconcileExercise(ex.exerciseId)

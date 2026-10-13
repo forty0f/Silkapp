@@ -18,6 +18,7 @@ function Calendar({ sessions }: { sessions: Session[] }) {
   const byDay = useMemo(() => {
     const m = new Map<string, Session[]>()
     for (const s of sessions) {
+      if (s.status === 'cancelled') continue
       const k = toDateKey(new Date(s.startedAt))
       m.set(k, [...(m.get(k) ?? []), s])
     }
@@ -125,6 +126,7 @@ export function HistoryPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{fmtDay(s.startedAt)}</span>
                       {s.status === 'in_progress' && <Pill tone="amber">w toku</Pill>}
+                      {s.status === 'cancelled' && <Pill>anulowany</Pill>}
                     </div>
                     <div className="tnum truncate text-sm text-muted">
                       T{s.week}/{s.slot} · {v.workingSets} serii · {fmtNum(v.volumeKg / 1000, 2)} t{dur != null ? ` · ${fmtDuration(dur)}` : ` · od ${fmtTime(s.startedAt)}`}

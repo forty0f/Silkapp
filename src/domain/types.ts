@@ -74,7 +74,12 @@ export interface SessionExercise extends PlanExercise {
   plannedSets: number
 }
 
-export type SessionStatus = 'in_progress' | 'completed'
+/**
+ * in_progress — started (also when left/paused; resumable)
+ * completed   — finished with performed work (fully or partially)
+ * cancelled   — finished without any performed working set; kept in history, never counted
+ */
+export type SessionStatus = 'in_progress' | 'completed' | 'cancelled'
 
 export interface RestTimer {
   exerciseId: ExerciseId
@@ -100,6 +105,12 @@ export interface Session extends SyncMeta {
   currentExerciseIndex: number
   restTimer: RestTimer | null
   note: string
+  /**
+   * Plan effect of a partially completed session, chosen by the user:
+   * true = next workout follows the plan, false = repeat this workout.
+   * Absent on sessions from earlier versions (they keep their original effect).
+   */
+  planAdvance?: boolean
 }
 
 export type SetType = 'warmup' | 'working'

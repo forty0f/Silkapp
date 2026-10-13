@@ -1,10 +1,24 @@
 import { z } from 'zod'
 import { EXERCISE_IDS } from '../domain/exercises'
 import type { ExerciseId } from '../domain/types'
-import { db, nowIso, SCHEMA_VERSION, uuid } from './db'
+import { db, nowIso, uuid } from './db'
 import { ensureInitialized } from './repo'
 
 export const APP_ID = 'silkapp'
+
+/**
+ * Backup file format (independent of the IndexedDB schema version, which stays 1).
+ * 1 — original format.
+ * 2 — sessions may be `cancelled` and may carry `planAdvance` (partial completion).
+ * A file is written as 1 whenever its content fits format 1, so it stays
+ * importable into older app versions; otherwise as 2, which older versions
+ * reject with a clear "newer version" message instead of a validation error.
+ */
+export const EXPORT_FORMAT_VERSION = 2
+
+export function exportFormatFor(sessions: { status: string; planAdvance?: boolean }[]): 1 | 2 {
+  return sessions.some((s) => s.status === 'cancelled' || s.planAdvance !== undefined) ? 2 : 1
+}
 
 const iso = z.string().min(10)
 const nullableIso = iso.nullable().optional()
@@ -50,13 +64,15 @@ const session = z.object({
   slot: z.number().int().min(1),
   phase: z.enum(['adaptation', 'continuation']),
   targetRir: rir,
-  status: z.enum(['in_progress', 'completed']),
+  // Explicit list — an unknown status is rejected, never guessed.
+  status: z.enum(['in_progress', 'completed', 'cancelled']),
   startedAt: iso,
   finishedAt: iso.nullable(),
   exercises: z.array(sessionExercise),
   currentExerciseIndex: z.number().int().min(0),
   restTimer: z.object({ exerciseId, startedAt: z.number(), durationSec: z.number() }).nullable(),
   note: z.string(),
+  planAdvance: z.boolean().optional(),
 })
 
 const num = z.number().finite().nullable()
@@ -126,7 +142,7 @@ export type ExportPayload = z.infer<typeof exportSchema>
 export async function buildExport(): Promise<ExportPayload> {
   return db.transaction('r', [db.plans, db.programs, db.sessions, db.sets, db.bodyMetrics, db.suggestions, db.settings], async () => ({
     app: APP_ID,
-    schemaVersion: SCHEMA_VERSION,
+    schemaVersion: exportFormatFor(await db.sessions.toArray()),
     exportedAt: nowIso(),
     data: {
       plans: await db.plans.toArray(),
@@ -178,8 +194,8 @@ export function validateImport(text: string): ValidationResult {
     return { ok: false, errors: ['To nie jest kopia zapasowa tej aplikacji (brak znacznika "silkapp").'] }
   }
   const version = (raw as { schemaVersion?: unknown }).schemaVersion
-  if (typeof version === 'number' && version > SCHEMA_VERSION) {
-    return { ok: false, errors: [`Kopia pochodzi z nowszej wersji aplikacji (schemat ${version}, obsługiwany ${SCHEMA_VERSION}). Zaktualizuj aplikację.`] }
+  if (typeof version === 'number' && version > EXPORT_FORMAT_VERSION) {
+    return { ok: false, errors: [`Kopia pochodzi z nowszej wersji aplikacji (schemat ${version}, obsługiwany ${EXPORT_FORMAT_VERSION}). Zaktualizuj aplikację.`] }
   }
   const parsed = exportSchema.safeParse(migratePayload(raw))
   if (!parsed.success) {
@@ -207,13 +223,23 @@ export function validateImport(text: string): ValidationResult {
 function checkIntegrity(p: ExportPayload): string[] {
   const errors: string[] = []
   const sessionIds = new Set(p.data.sessions.map((s) => s.id))
+  for (const [name, rows] of Object.entries(p.data)) {
+    const ids = (rows as { id: string }[]).map((r) => r.id)
+    if (new Set(ids).size !== ids.length) errors.push(`Powtórzone identyfikatory w „${name}”.`)
+  }
+  if (p.schemaVersion < 2 && exportFormatFor(p.data.sessions) === 2) errors.push('Kopia w formacie 1 zawiera dane formatu 2 (status „cancelled” lub planAdvance).')
+  for (const s of p.data.sessions) {
+    if (s.status !== 'in_progress' && !s.finishedAt) errors.push(`Sesja ${s.id}: zakończona bez daty zakończenia.`)
+    if (s.status === 'in_progress' && s.finishedAt) errors.push(`Sesja ${s.id}: w toku, a ma datę zakończenia.`)
+    if (s.planAdvance !== undefined && s.status !== 'completed') errors.push(`Sesja ${s.id}: wybór planu (planAdvance) dozwolony tylko dla ukończonej sesji.`)
+  }
   const orphanSets = p.data.sets.filter((s) => !sessionIds.has(s.sessionId)).length
   if (orphanSets) errors.push(`${orphanSets} serii odwołuje się do nieistniejących sesji.`)
   if (p.data.programs.filter((x) => x.status === 'active').length > 1) errors.push('Więcej niż jeden aktywny program.')
   if (p.data.sessions.filter((s) => s.status === 'in_progress').length > 1) errors.push('Więcej niż jedna niedokończona sesja.')
   const planIds = new Set(p.data.plans.map((x) => x.id))
   if (p.data.programs.some((x) => !planIds.has(x.planId))) errors.push('Program odwołuje się do nieistniejącego planu.')
-  return errors
+  return errors.length > 8 ? [...errors.slice(0, 8), `…oraz ${errors.length - 8} innych błędów.`] : errors
 }
 
 const SNAPSHOT_LIMIT = 3

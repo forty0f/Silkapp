@@ -85,7 +85,9 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
         back="/history"
       />
       <div className="flex flex-wrap gap-1.5">
-        <Pill tone={session.status === 'completed' ? 'green' : 'amber'}>{session.status === 'completed' ? 'ukończony' : 'w toku'}</Pill>
+        <Pill tone={session.status === 'completed' ? 'green' : session.status === 'cancelled' ? 'neutral' : 'amber'}>
+          {session.status === 'completed' ? 'ukończony' : session.status === 'cancelled' ? 'anulowany' : 'w toku'}
+        </Pill>
         <Pill>RIR {formatRir(session.targetRir)}</Pill>
         <Pill>{session.phase === 'adaptation' ? 'adaptacja' : 'kontynuacja'}</Pill>
         <Pill>plan v{session.planVersion}</Pill>
@@ -151,7 +153,7 @@ export function SessionDetailPage({ sessionId }: { sessionId: string }) {
       <p className="mt-3 px-1 text-xs text-faint">Dotknij serii, aby ją poprawić. Zmiany zapisują się od razu. Propozycje progresji wyliczane są w chwili zakończenia treningu.</p>
 
       <div className="mt-6 flex gap-2">
-        {session.status === 'completed' ? (
+        {session.status !== 'in_progress' ? (
           <Button className="flex-1" onClick={reopen}>
             <RotateCcw size={16} /> Wznów trening
           </Button>

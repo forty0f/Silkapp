@@ -46,7 +46,8 @@ export function WorkoutPage({ sessionId }: { sessionId: string }) {
       </div>
     )
   }
-  if (session.status === 'completed') return <WorkoutSummary session={session} sets={sets} />
+  // Anything finished (completed or cancelled) shows its summary — never the active form.
+  if (session.status !== 'in_progress') return <WorkoutSummary session={session} sets={sets} />
   return <ActiveWorkout session={session} sets={sets} settings={settings} />
 }
 

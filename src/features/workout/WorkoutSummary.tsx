@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowDown, ArrowRight, ArrowUp, CheckCircle2, Minus, RotateCcw, TrendingUp } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, CheckCircle2, Minus, RotateCcw, TrendingUp, XCircle } from 'lucide-react'
 import { db } from '../../db/db'
 import { decideSuggestion, getSettings, lastPerformance, performanceFor, reopenSession } from '../../db/repo'
 import { comparePerformances, evaluatePerformance, fmtKg, type Comparison, type Evaluation } from '../../domain/progression'
@@ -90,8 +90,10 @@ export function WorkoutSummary({ session, sets }: { session: Session; sets: SetE
   return (
     <div className="pb-8 pt-[max(1rem,env(safe-area-inset-top))]" data-testid="workout-summary">
       <div className="flex flex-col items-center pb-2 pt-4 text-center">
-        <CheckCircle2 size={44} className="text-go" />
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">Trening {session.workoutType} ukończony</h1>
+        {session.status === 'cancelled' ? <XCircle size={44} className="text-faint" /> : <CheckCircle2 size={44} className="text-go" />}
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          Trening {session.workoutType} {session.status === 'cancelled' ? 'anulowany' : 'ukończony'}
+        </h1>
         <p className="text-sm text-muted">
           {fmtDay(session.startedAt)} · tydzień {session.week}, sesja {session.slot}/3
         </p>
